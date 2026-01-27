@@ -1,0 +1,88 @@
+﻿
+> frontend@0.1.0 build
+> next build
+
+▲ Next.js 16.1.5 (Turbopack)
+- Environments: .env.local, .env.production
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 1330.3ms
+  Running TypeScript ...
+node.exe : Failed 
+to compile.
+At line:1 char:1
++ & "C:\Program Fil
+es\nodejs/node.exe"
+ "C:\Users\Mo_Matan
+y\AppData\Roam ...
++ ~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
+    + CategoryInfo 
+             : No  
+  tSpecified: (F   
+ ailed to compi    
+le.:String) []    
+, RemoteExcept    
+ion
+    + FullyQualifi 
+   edErrorId : Na  
+  tiveCommandErr   
+ or
+ 
+
+.next/dev/types/val
+idator.ts:71:39
+Type error: Cannot 
+find module '../../
+../app/api/ai-insig
+ht/route.js' or 
+its corresponding 
+type declarations.
+
+[0m [90m 69 
+|[39m {
+ [90m 70 |[39m   
+type __IsExpected[
+33m<[39m[33mSpeci
+fic[39m 
+[36mextends[39m 
+[33mRouteHandlerCon
+fig[39m[33m<[39m
+[32m"/api/ai-insig
+ht"[39m[33m>>[39
+m [33m=[39m 
+[33mSpecific[39m
+[31m[1m>[22m[39
+m[90m 71 |[39m   
+[36mconst[39m 
+handler 
+[33m=[39m {} 
+[36mas[39m 
+[36mtypeof[39m [
+36mimport[39m([32
+m"../../../app/api/
+ai-insight/route.js
+"[39m)
+ [90m    |[39m   
+                   
+                 [
+31m[1m^[22m[39m
+ [90m 72 |[39m   
+type __Check 
+[33m=[39m __IsExp
+ected[33m<[39m[3
+6mtypeof[39m 
+handler[33m>[39m
+ [90m 73 |[39m   
+[90m// 
+@ts-ignore[39m
+ [90m 74 |[39m   
+type __Unused 
+[33m=[39m 
+__Check[0m
+Next.js build 
+worker exited with 
+code: 1 and 
+signal: null

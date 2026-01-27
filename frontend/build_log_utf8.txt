@@ -1,0 +1,97 @@
+﻿
+> frontend@0.1.0 build
+> next build
+
+▲ Next.js 16.1.5 (Turbopack)
+- Environments: .env.local, .env.production
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 1417.1ms
+  Running TypeScript ...
+  Collecting page data using 23 workers ...
+node.exe : Error: 
+export const 
+dynamic = "force-st
+atic"/export const 
+revalidate not 
+configured on 
+route 
+"/api/download" 
+with "output: 
+export". See more 
+info here: https://
+nextjs.org/docs/adv
+anced-features/stat
+ic-html-export
+At line:1 char:1
++ & "C:\Program Fil
+es\nodejs/node.exe"
+ "C:\Users\Mo_Matan
+y\AppData\Roam ...
++ ~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
+    + CategoryInfo 
+             : No  
+  tSpecified: (E   
+ rror: export c    
+...tic-html-ex    
+port:String) [    
+], RemoteExcep    
+tion
+    + FullyQualifi 
+   edErrorId : Na  
+  tiveCommandErr   
+ or
+ 
+    at module 
+evaluation (C:\Proj
+ects\DOWNVID\fronte
+nd\.next\server\chu
+nks\[root-of-the-se
+rver]__d35da147._.j
+s:1:2105)
+    at 
+instantiateModule (
+C:\Projects\DOWNVID
+\frontend\.next\ser
+ver\chunks\[turbopa
+ck]_runtime.js:740:
+9)
+    at instantiateR
+untimeModule (C:\Pr
+ojects\DOWNVID\fron
+tend\.next\server\c
+hunks\[turbopack]_r
+untime.js:768:12)
+    at getOrInstant
+iateRuntimeModule (
+C:\Projects\DOWNVID
+\frontend\.next\ser
+ver\chunks\[turbopa
+ck]_runtime.js:781:
+12)
+    at Object.m (C:
+\Projects\DOWNVID\f
+rontend\.next\serve
+r\chunks\[turbopack
+]_runtime.js:790:18
+)
+    at 
+Object.<anonymous> 
+(C:\Projects\DOWNVI
+D\frontend\.next\se
+rver\app\api\downlo
+ad\route.js:5:3)
+
+> Build error 
+occurred
+Error: Failed to 
+collect page data 
+for /api/download
+    at 
+ignore-listed 
+frames {
+  type: 'Error'
+}
