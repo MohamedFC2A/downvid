@@ -1,122 +1,136 @@
 # =============================================================================
-# DOWNVID - Docker Ignore File
+# DOWNVID - Root .gitignore
 # =============================================================================
-# Reduces Docker build context size for faster builds (~8min -> ~2min)
-# Only include source code and essential config files
+# This file prevents unnecessary files from being tracked in Git.
+# Fixes the "blue files" issue on GitHub by excluding build artifacts.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Git Directories (CRITICAL - reduces context significantly)
+# Dependencies
 # -----------------------------------------------------------------------------
-.git
-.gitignore
-frontend/.git
-frontend/.gitignore
-
-# -----------------------------------------------------------------------------
-# Dependencies (will be reinstalled in container)
-# -----------------------------------------------------------------------------
-node_modules
-frontend/node_modules
+node_modules/
 .pnp
 .pnp.js
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
 # -----------------------------------------------------------------------------
 # Python Virtual Environments
 # -----------------------------------------------------------------------------
-.venv
-venv
-backend/.venv
-backend/venv
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+.venv/
+venv/
+ENV/
+env/
 .Python
+__pycache__/
+*.py[cod]
+*$py.class
 *.so
+.eggs/
+*.egg-info/
+*.egg
+MANIFEST
 
 # -----------------------------------------------------------------------------
-# Build Output (will be rebuilt in container)
+# Next.js Build Output
 # -----------------------------------------------------------------------------
-.next
-frontend/.next
-out
-frontend/out
-build
-dist
-*.tsbuildinfo
+.next/
+out/
+build/
+dist/
 
 # -----------------------------------------------------------------------------
-# IDE and Editors
+# Testing
 # -----------------------------------------------------------------------------
-.idea
-.vscode
-*.swp
-*.swo
-.sublime-*
+coverage/
+.nyc_output/
+*.lcov
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+pytestdebug.log
 
 # -----------------------------------------------------------------------------
-# Test and Coverage
-# -----------------------------------------------------------------------------
-coverage
-.nyc_output
-htmlcov
-.pytest_cache
-.tox
-
-# -----------------------------------------------------------------------------
-# Environment Files
+# Environment Files (keep templates, ignore actual secrets)
 # -----------------------------------------------------------------------------
 .env
 .env.local
 .env.*.local
-frontend/.env.local
-backend/.env
+!.env.example
+!.env.production
+
+# -----------------------------------------------------------------------------
+# IDE and Editor Files
+# -----------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+
+# -----------------------------------------------------------------------------
+# OS Generated Files
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
 
 # -----------------------------------------------------------------------------
 # Logs and Temp Files
 # -----------------------------------------------------------------------------
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+pip-log.txt
+pip-delete-this-directory.txt
 
 # -----------------------------------------------------------------------------
-# Application Generated
+# Application Generated Files
 # -----------------------------------------------------------------------------
-downloads
+downloads/
 *.tmp
 *.temp
+*.bak
 
 # -----------------------------------------------------------------------------
-# Documentation (not needed in container)
+# Build Artifacts
 # -----------------------------------------------------------------------------
-*.md
-!README.md
-docs
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+.turbo
 
 # -----------------------------------------------------------------------------
-# OS Files
+# Binary/Executable Files
 # -----------------------------------------------------------------------------
-.DS_Store
-Thumbs.db
-Desktop.ini
+backend/bin/ffmpeg*
+backend/bin/ffprobe*
+*.exe
+*.dll
+*.dylib
 
 # -----------------------------------------------------------------------------
-# GitHub Actions (not needed in container)
+# Security - Never commit these
 # -----------------------------------------------------------------------------
-.github
-
-# -----------------------------------------------------------------------------
-# Fly.io Config (already parsed, not needed in container)
-# -----------------------------------------------------------------------------
-fly.toml
-
-# -----------------------------------------------------------------------------
-# Windows Scripts (not needed in Linux container)
-# -----------------------------------------------------------------------------
-*.bat
-*.cmd
-*.ps1
+*.pem
+*.key
+*.crt
+secrets/

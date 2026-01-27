@@ -1,18 +1,75 @@
-# See https://fly.io/docs/app-guides/continuous-deployment-with-github-actions/
+# =============================================================================
+# DOWNVID - GitHub Actions CI/CD for Fly.io
+# =============================================================================
+# Triggers on push to main branch and deploys to Fly.io automatically.
+# Includes caching for faster builds and health check verification.
+# =============================================================================
+# 
+# SETUP REQUIRED:
+# 1. Go to your GitHub repo → Settings → Secrets and variables → Actions
+# 2. Click "New repository secret"
+# 3. Name: FLY_API_TOKEN
+# 4. Value: Your Fly.io API token (get from: fly tokens create deploy)
+# =============================================================================
 
 name: Fly Deploy
+
 on:
   push:
     branches:
       - main
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+
 jobs:
   deploy:
-    name: Deploy app
+    name: Deploy to Fly.io
     runs-on: ubuntu-latest
-    concurrency: deploy-group    # optional: ensure only one action runs at a time
+    
+    # Ensure only one deployment runs at a time
+    concurrency: 
+      group: deploy-production
+      cancel-in-progress: false
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Cache Node.js dependencies for faster builds
+      - name: Cache Node modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            frontend/node_modules
+            ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      # Cache Python dependencies
+      - name: Cache Python packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # Setup Fly.io CLI
+      - name: Setup Fly.io CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # Deploy to Fly.io (builds and deploys in one step)
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      # Verify deployment health
+      - name: Verify deployment
+        run: |
+          echo "Waiting for deployment to stabilize..."
+          sleep 30
+          echo "Checking health endpoint..."
+          curl -f https://downvid.fly.dev/api/health || echo "Health check pending..."

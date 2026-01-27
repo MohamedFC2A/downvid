@@ -12,6 +12,13 @@ from app.services.deepseek_service import deepseek_service
 router = APIRouter()
 ytdlp_service = YtDlpService()
 
+
+# Health check endpoint for Fly.io container health monitoring
+@router.get("/health")
+async def health_check():
+    """Health check endpoint for Fly.io."""
+    return {"status": "healthy", "service": "downvid-api"}
+
 class AnalyzeRequest(BaseModel):
     url: str
 

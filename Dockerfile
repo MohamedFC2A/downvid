@@ -1,8 +1,10 @@
 # =============================================================================
-# DOWNVID - Optimized Dockerfile for Fly.io Deployment
+# DOWNVID - Optimized Multi-Stage Dockerfile for Fly.io
 # =============================================================================
-# Strategy: Run FastAPI backend on PORT, serve frontend via reverse proxy
-# The frontend is built as static files and served through FastAPI
+# Architecture: Single-process deployment
+# - Next.js is built as static export (HTML/CSS/JS files)
+# - FastAPI serves static files + API endpoints
+# - Only FastAPI listens on $PORT (Fly.io requirement)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -12,22 +14,31 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Copy package files first for layer caching
+# Copy package files first for better layer caching
 COPY frontend/package*.json ./
-RUN npm ci
 
-# Copy source and build as static export
+# Install dependencies (clean install for reproducibility)
+RUN npm ci --prefer-offline --no-audit
+
+# Copy frontend source code
 COPY frontend/ ./
 
-# Build Next.js (output: .next folder for standalone or out/ for static)
+# Set production environment for build
+ENV NODE_ENV=production
+ENV NEXT_PUBLIC_BACKEND_URL=https://downvid.fly.dev
+ENV NEXT_PUBLIC_WS_URL=wss://downvid.fly.dev
+
+# Build Next.js as static export (outputs to 'out' directory)
 RUN npm run build
 
 # -----------------------------------------------------------------------------
-# Stage 2: Production Runtime
+# Stage 2: Production Runtime (Python/FastAPI)
 # -----------------------------------------------------------------------------
 FROM python:3.11-slim AS production
 
-# Install system dependencies (ffmpeg for yt-dlp)
+# Install system dependencies
+# - ffmpeg: required by yt-dlp for video/audio merging
+# - curl: for health checks
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
@@ -36,33 +47,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Python dependencies first (layer caching)
+# Copy and install Python dependencies first (layer caching)
 COPY backend/requirements.txt ./backend/
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
-# Copy backend source
+# Copy backend source code
 COPY backend/ ./backend/
 
-# Copy built frontend static files (if using static export)
-# For Next.js standalone: copy .next/standalone and .next/static
-COPY --from=frontend-builder /app/frontend/.next/standalone ./frontend/
-COPY --from=frontend-builder /app/frontend/.next/static ./frontend/.next/static
-COPY --from=frontend-builder /app/frontend/public ./frontend/public
+# Copy built frontend static files from builder stage
+COPY --from=frontend-builder /app/frontend/out ./frontend/out
 
-# Create directories
-RUN mkdir -p /app/downloads /app/backend/bin
+# Create required directories
+RUN mkdir -p /app/downloads
 
-# Environment
+# Environment variables
+# PORT: Fly.io dynamically assigns this (default 8080)
+# PYTHONUNBUFFERED: Ensures logs appear in real-time
 ENV PORT=8080
-ENV NODE_ENV=production
 ENV PYTHONUNBUFFERED=1
+ENV NODE_ENV=production
 
-# Create startup script that runs both services
-RUN echo '#!/bin/bash\n\
-    cd /app/frontend && node server.js &\n\
-    cd /app/backend && python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}\n\
-    ' > /app/start.sh && chmod +x /app/start.sh
-
+# Expose the port (documentation only, Fly.io uses PORT env var)
 EXPOSE 8080
 
-CMD ["/bin/bash", "/app/start.sh"]
+# Health check for Fly.io
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8080}/api/health || exit 1
+
+# Run FastAPI with uvicorn
+# - host 0.0.0.0: Accept connections from anywhere (required for containers)
+# - port from $PORT: Fly.io dynamically assigns this
+CMD ["sh", "-c", "cd /app/backend && python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
