@@ -29,7 +29,8 @@ ENV NEXT_PUBLIC_BACKEND_URL=https://downvid.fly.dev
 ENV NEXT_PUBLIC_WS_URL=wss://downvid.fly.dev
 
 # Build Next.js as static export (outputs to 'out' directory)
-RUN npm run build && ls -la out/ || echo "Build may have failed"
+# We use 'test -d out' to ensure the build actually produced the expected output
+RUN npm run build && test -d out
 
 # -----------------------------------------------------------------------------
 # Stage 2: Production Runtime (Python/FastAPI)
