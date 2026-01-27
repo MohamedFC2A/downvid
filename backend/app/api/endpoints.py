@@ -25,10 +25,18 @@ class AnalyzeResponse(BaseModel):
 
 @router.websocket("/download/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"WebSocket connection attempt from client: {client_id}")
+    
     await manager.connect(websocket, client_id)
+    logger.info(f"WebSocket connected: {client_id}")
+    
     try:
         while True:
             data = await websocket.receive_json()
+            logger.debug(f"Received from {client_id}: {data}")
+            
             # Expecting: { action: "start_download", url: "...", format_id: "...", mode: "video"|"audio" }
             if data.get("action") == "start_download":
                 url = data.get("url")
@@ -36,18 +44,24 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 mode = data.get("mode", "video")
                 
                 if url and format_id:
+                    logger.info(f"Starting download for {client_id}: {url}")
                     await ytdlp_service.download_video(url, client_id, format_id, mode)
+                else:
+                    await manager.send_personal_message({
+                        "status": "error",
+                        "error": "Missing url or format_id"
+                    }, client_id)
             
-            # Legacy fallback if just url (though we should strictly migrate)
+            # Legacy fallback
             elif "url" in data and "action" not in data:
-                 # Default to best video if no format specified? Or just ignore?
-                 # Ignoring strictly as per new requirements to force format selection
-                 pass
+                pass
 
     except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected: {client_id}")
         manager.disconnect(client_id)
     except Exception as e:
-        print(f"WS Error: {e}")
+        logger.error(f"WebSocket error for {client_id}: {e}")
+        manager.disconnect(client_id)
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_video(request: AnalyzeRequest):
