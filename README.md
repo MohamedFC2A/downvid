@@ -113,10 +113,71 @@ Extracts metadata and triggers AI analysis.
 *   **Input**: `{ "url": "https://..." }`
 *   **Output**: `{ "title": "...", "thumbnail": "...", "analysis": { ... } }`
 
+```text
+/
+├── start.bat               # Unified Launcher
+├── /frontend               # Next.js Application
+│   ├── /app
+│   │   ├── /tool           # Main Downloader Interface
+│   │   └── globals.css     # Dark Mode Theme
+│   ├── /components
+│   │   ├── /modules
+│   │   │   ├── /downloader # Input, Preview, Progress
+│   │   │   └── /ai         # Insights Panel
+│   │   └── /ui             # Atomic Components (Card, Button)
+│   └── /lib
+│       └── socket.ts       # WebSocket Client
+├── /backend                # FastAPI Server
+│   ├── /app
+│   │   ├── /api            # Endpoints & WS Manager
+│   │   ├── /services       # YtDlp & DeepSeek Logic
+│   │   └── main.py         # Entry Point
+│   └── requirements.txt
+```
+
+## 🔌 API Endpoints
+
+### `POST /api/analyze`
+Extracts metadata and triggers AI analysis.
+*   **Input**: `{ "url": "https://..." }`
+*   **Output**: `{ "title": "...", "thumbnail": "...", "analysis": { ... } }`
+
 ### `WS /api/download/{client_id}`
 Real-time download stream.
 *   **Message**: `{ "url": "https://..." }`
 *   **Updates**: `{ "status": "downloading", "percent": 45, "speed": "2.5MB/s" }`
+
+---
+
+## 🌐 Deployment Guide (Free Tier Strategy)
+
+Maximize resources by splitting the app between Vercel (Frontend) and Render (Backend).
+
+### 1. Backend (Render Free)
+*   **Create New Web Service** on [Render](https://render.com).
+*   **Connect GitHub Repo**.
+*   **Root Directory**: `.` (or leave empty)
+*   **Build Command**: `pip install -r backend/requirements.txt`
+*   **Start Command**: `python -m uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`
+*   **Environment Variables**:
+    *   `DEEPSEEK_API_KEY`: Your key.
+    *   `PYTHON_VERSION`: `3.11.0`
+
+> **Note**: Free tier spins down after inactivity. The first request might take 50s.
+
+### 2. Frontend (Vercel)
+*   **Import Project** on [Vercel](https://vercel.com).
+*   **Root Directory**: `frontend`.
+*   **Build Command**: `next build` (default).
+*   **Output Directory**: `out` (default).
+*   **Environment Variables**:
+    *   `NEXT_PUBLIC_BACKEND_URL`: `https://your-render-app-name.onrender.com`
+    *   `NEXT_PUBLIC_WS_URL`: `wss://your-render-app-name.onrender.com` (Optional, derived automatically)
+
+### 3. Alternative: Single Service (Railway/Fly.io)
+Deploy the entire repo using the included `Dockerfile`.
+*   **Railway**: Detects verify Dockerfile automatically.
+*   **Environment**: Set `DEEPSEEK_API_KEY`.
 
 ---
 **DOWNVID V2.0** — *Professional Extraction Pipeline*

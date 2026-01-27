@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Navbar } from '@/components/modules/navbar/Navbar';
+import { ErrorTracker } from '@/components/ErrorTracker';
 import './globals.css';
 
 export const metadata: Metadata = {
