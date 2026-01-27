@@ -29,7 +29,7 @@ ENV NEXT_PUBLIC_BACKEND_URL=https://downvid.fly.dev
 ENV NEXT_PUBLIC_WS_URL=wss://downvid.fly.dev
 
 # Build Next.js as static export (outputs to 'out' directory)
-RUN npm run build
+RUN npm run build && ls -la out/ || echo "Build may have failed"
 
 # -----------------------------------------------------------------------------
 # Stage 2: Production Runtime (Python/FastAPI)
@@ -57,17 +57,22 @@ COPY backend/ ./backend/
 # Copy built frontend static files from builder stage
 COPY --from=frontend-builder /app/frontend/out ./frontend/out
 
+# Debug: List frontend directory to verify copy worked
+RUN echo "=== Frontend out directory contents ===" && \
+    ls -la /app/frontend/out/ && \
+    echo "=== _next directory ===" && \
+    ls -la /app/frontend/out/_next/ 2>/dev/null || echo "No _next directory"
+
 # Create required directories
 RUN mkdir -p /app/downloads
 
 # Environment variables
-# PORT: Fly.io dynamically assigns this (default 8080)
-# PYTHONUNBUFFERED: Ensures logs appear in real-time
 ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
 ENV NODE_ENV=production
+ENV FRONTEND_PATH=/app/frontend/out
 
-# Expose the port (documentation only, Fly.io uses PORT env var)
+# Expose the port
 EXPOSE 8080
 
 # Health check for Fly.io
@@ -75,6 +80,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8080}/api/health || exit 1
 
 # Run FastAPI with uvicorn
-# - host 0.0.0.0: Accept connections from anywhere (required for containers)
-# - port from $PORT: Fly.io dynamically assigns this
 CMD ["sh", "-c", "cd /app/backend && python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
