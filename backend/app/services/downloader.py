@@ -1,8 +1,12 @@
 import yt_dlp
 import os
 import asyncio
+import logging
 from typing import Callable, Optional, Dict
 from pathlib import Path
+from app.services import ffmpeg_utils
+
+logger = logging.getLogger(__name__)
 
 class DownloadService:
     """Service for handling video downloads with real-time progress tracking"""
@@ -102,6 +106,9 @@ class DownloadService:
             '480p': 'bestvideo[height<=480]+bestaudio/best[height<=480]'
         }
         
+        # Get FFmpeg location if available locally
+        ffmpeg_opts = ffmpeg_utils.get_ydl_ffmpeg_opts()
+        
         # Configure yt-dlp options
         ydl_opts = {
             'format': quality_map.get(quality, quality_map['1080p']) if format_type == 'mp4' else 'bestaudio/best',
@@ -109,6 +116,7 @@ class DownloadService:
             'progress_hooks': [self._progress_hook],
             'quiet': False,
             'no_warnings': False,
+            **ffmpeg_opts
         }
         
         # Add post-processor for audio-only
@@ -132,7 +140,37 @@ class DownloadService:
             return file_path
         
         except Exception as e:
-            raise Exception(f"Download failed: {str(e)}")
+            error_msg = str(e)
+            
+            # Check if this is an FFmpeg-related error - try fallback
+            if 'ffmpeg' in error_msg.lower() or 'merging' in error_msg.lower():
+                logger.warning(f"FFmpeg error, trying fallback to 'best' format: {error_msg}")
+                
+                # Fallback options: use 'best' format (no merge needed)
+                fallback_opts = {
+                    'format': 'best',
+                    'outtmpl': str(self.download_dir / '%(title)s.%(ext)s'),
+                    'progress_hooks': [self._progress_hook],
+                    'quiet': False,
+                    'no_warnings': False,
+                    **ffmpeg_opts
+                }
+                
+                try:
+                    loop = asyncio.get_event_loop()
+                    file_path = await loop.run_in_executor(
+                        None,
+                        self._download_sync,
+                        url,
+                        fallback_opts
+                    )
+                    logger.info("Fallback download succeeded")
+                    return file_path
+                except Exception as fallback_error:
+                    logger.error(f"Fallback download also failed: {fallback_error}")
+                    raise Exception(f"Download failed: {fallback_error}")
+            
+            raise Exception(f"Download failed: {error_msg}")
     
     def _download_sync(self, url: str, opts: dict) -> str:
         """Synchronous download function for executor"""

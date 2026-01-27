@@ -3,9 +3,13 @@ import asyncio
 import re
 import os
 import uuid
+import logging
 from typing import List, Optional
 from pydantic import BaseModel
 from app.api.websocket import manager
+from app.services import ffmpeg_utils
+
+logger = logging.getLogger(__name__)
 
 class VideoFormat(BaseModel):
     format_id: str
@@ -158,50 +162,92 @@ class YtDlpService:
             }]
             ext_args = {'postprocessors': postprocessors}
 
+        # Get FFmpeg location if available locally
+        ffmpeg_opts = ffmpeg_utils.get_ydl_ffmpeg_opts()
+        
         ydl_opts = {
             'progress_hooks': [progress_hook],
             'outtmpl': f'downloads/{file_token}_%(title)s.%(ext)s',
             'format': format_str,
             'noplaylist': True,
-            **ext_args
+            **ext_args,
+            **ffmpeg_opts
         }
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                info = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=True)) # extract_info with download=True returns info dict 
+        async def do_download(opts: dict) -> tuple[str, str]:
+            """Execute download with given options, return (token, filepath)."""
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=True))
                 
                 # Check file location
                 if 'requested_downloads' in info:
                     filepath = info['requested_downloads'][0]['filepath']
                 else:
                     filepath = ydl.prepare_filename(info)
-                    # Note: if postprocessor changes extension (mp3), filename might change. 
-                    # yt-dlp usually updates info['ext']?
                     if mode == 'audio':
-                        # FFmpegExtractAudio changes extension to mp3
                         pre, _ = os.path.splitext(filepath)
                         filepath = pre + ".mp3"
-
-                # Send final success message with file_token
-                # Storing filepath in memory map is needed for the serve endpoint.
-                # For now, let's assume we pass the filepath via some shared state or cache.
-                # But to keep it stateless(ish), we can just use the file_token which is part of filename.
-                
-                # Actually, simpler: Use a global dict in a new service or endpoints.
-                # For now, we return the path/token in the message.
-                
-                await manager.send_personal_message({
-                        "status": "completed",
-                        "percent": 100,
-                        "file_token": file_token,
-                        "filename": os.path.basename(filepath)
-                }, client_id)
                 
                 return file_token, filepath
+        
+        try:
+            file_token, filepath = await do_download(ydl_opts)
+            
+            await manager.send_personal_message({
+                    "status": "completed",
+                    "percent": 100,
+                    "file_token": file_token,
+                    "filename": os.path.basename(filepath)
+            }, client_id)
+            
+            return file_token, filepath
 
-            except Exception as e:
-                await manager.send_personal_message({
-                        "status": "error",
-                        "error": str(e)
-                }, client_id)
-                raise e
+        except Exception as e:
+            error_msg = str(e)
+            
+            # Check if this is an FFmpeg-related error and we can fallback
+            if 'ffmpeg' in error_msg.lower() or 'merging' in error_msg.lower():
+                logger.warning(f"FFmpeg error, trying fallback to 'best' format: {error_msg}")
+                
+                try:
+                    # Fallback: use 'best' format (single stream, no merge needed)
+                    fallback_opts = {
+                        'progress_hooks': [progress_hook],
+                        'outtmpl': f'downloads/{file_token}_%(title)s.%(ext)s',
+                        'format': 'best',
+                        'noplaylist': True,
+                        **ffmpeg_opts
+                    }
+                    
+                    await manager.send_personal_message({
+                        "status": "downloading",
+                        "percent": 0,
+                        "message": "Retrying with fallback quality..."
+                    }, client_id)
+                    
+                    file_token, filepath = await do_download(fallback_opts)
+                    
+                    await manager.send_personal_message({
+                            "status": "completed",
+                            "percent": 100,
+                            "file_token": file_token,
+                            "filename": os.path.basename(filepath),
+                            "note": "Downloaded with fallback quality (FFmpeg unavailable)"
+                    }, client_id)
+                    
+                    return file_token, filepath
+                    
+                except Exception as fallback_error:
+                    logger.error(f"Fallback download also failed: {fallback_error}")
+                    await manager.send_personal_message({
+                            "status": "error",
+                            "error": f"Download failed: {fallback_error}"
+                    }, client_id)
+                    raise fallback_error
+            
+            # Not an FFmpeg error, just report it
+            await manager.send_personal_message({
+                    "status": "error",
+                    "error": error_msg
+            }, client_id)
+            raise e
