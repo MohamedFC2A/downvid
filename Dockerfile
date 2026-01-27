@@ -1,10 +1,10 @@
 # =============================================================================
-# DOWNVID - Optimized Multi-Stage Dockerfile for Fly.io
+# DOWNVID - Optimized Multi-Stage Dockerfile (Railway-ready)
 # =============================================================================
 # Architecture: Single-process deployment
-# - Next.js is built as static export (HTML/CSS/JS files)
-# - FastAPI serves static files + API endpoints
-# - Only FastAPI listens on $PORT (Fly.io requirement)
+# - Next.js is built as a static export (HTML/CSS/JS files)
+# - FastAPI serves static files + API endpoints + WebSockets
+# - Only FastAPI listens on $PORT (platform-friendly: Railway/Fly/etc.)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -23,10 +23,13 @@ RUN npm ci --prefer-offline --no-audit
 # Copy frontend source code
 COPY frontend/ ./
 
-# Set production environment for build
+# Build-time environment for Next.js static export.
+# Prefer same-origin requests by default (frontend uses `/api` and current host for WS).
 ENV NODE_ENV=production
-ENV NEXT_PUBLIC_BACKEND_URL=https://downvid.fly.dev
-ENV NEXT_PUBLIC_WS_URL=wss://downvid.fly.dev
+ARG NEXT_PUBLIC_BACKEND_URL=""
+ARG NEXT_PUBLIC_WS_URL=""
+ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
+ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
 
 # Build Next.js as static export (outputs to 'out' directory)
 # We use 'test -d out' to ensure the build actually produced the expected output
@@ -72,11 +75,12 @@ ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
 ENV NODE_ENV=production
 ENV FRONTEND_PATH=/app/frontend/out
+ENV DOWNLOADS_DIR=/app/downloads
 
 # Expose the port
 EXPOSE 8080
 
-# Health check for Fly.io
+# Health check for container platforms
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8080}/api/health || exit 1
 

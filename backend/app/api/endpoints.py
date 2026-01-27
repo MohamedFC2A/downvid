@@ -3,9 +3,9 @@ from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel
 from typing import List, Optional
-import os
-import glob
+from pathlib import Path
 from app.api.websocket import manager
+from app.core.config import settings
 from app.services.ytdlp_service import YtDlpService, VideoFormat
 from app.services.deepseek_service import deepseek_service
 
@@ -13,10 +13,10 @@ router = APIRouter()
 ytdlp_service = YtDlpService()
 
 
-# Health check endpoint for Fly.io container health monitoring
+# Health check endpoint for container platforms
 @router.get("/health")
 async def health_check():
-    """Health check endpoint for Fly.io."""
+    """Health check endpoint."""
     return {"status": "healthy", "service": "downvid-api"}
 
 class AnalyzeRequest(BaseModel):
@@ -95,15 +95,15 @@ async def analyze_video(request: AnalyzeRequest):
 @router.get("/file/serve/{file_token}")
 async def serve_file(file_token: str):
     try:
+        downloads_dir = Path(settings.DOWNLOADS_DIR)
         # Look for file in downloads folder starting with token
-        search_pattern = f"downloads/{file_token}_*"
-        files = glob.glob(search_pattern)
+        files = sorted(downloads_dir.glob(f"{file_token}_*"))
         
         if not files:
             raise HTTPException(status_code=404, detail="File not found")
             
         filepath = files[0]
-        filename = os.path.basename(filepath)
+        filename = filepath.name
         # Remove the token prefix for the download name if desired, or keep it unique. 
         # Let's remove the token prefix for the user implementation: {token}_{title}.ext
         # {file_token}_ prefix length is len(file_token)+1
@@ -111,13 +111,13 @@ async def serve_file(file_token: str):
         
         def cleanup():
             try:
-                if os.path.exists(filepath):
-                    os.remove(filepath)
+                if filepath.exists():
+                    filepath.unlink()
             except Exception as e:
                 print(f"Error cleaning up {filepath}: {e}")
 
         return FileResponse(
-            filepath, 
+            str(filepath), 
             filename=download_name, 
             background=BackgroundTask(cleanup)
         )

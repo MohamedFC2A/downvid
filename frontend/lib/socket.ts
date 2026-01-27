@@ -1,5 +1,5 @@
 // WebSocket client for download progress updates
-// Production-ready for Fly.io deployment
+// Production-ready for container deployments (same-origin by default)
 
 export type DownloadStatus = {
     status: string;

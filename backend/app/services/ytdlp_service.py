@@ -4,9 +4,11 @@ import re
 import os
 import uuid
 import logging
+from pathlib import Path
 from typing import List, Optional
 from pydantic import BaseModel
 from app.api.websocket import manager
+from app.core.config import settings
 from app.services import ffmpeg_utils
 
 logger = logging.getLogger(__name__)
@@ -108,8 +110,8 @@ class YtDlpService:
     async def download_video(self, url: str, client_id: str, format_id: str, mode: str):
         loop = asyncio.get_running_loop()
         
-        # Create downloads directory if not exists
-        os.makedirs("downloads", exist_ok=True)
+        downloads_dir = Path(settings.DOWNLOADS_DIR)
+        downloads_dir.mkdir(parents=True, exist_ok=True)
         
         file_token = str(uuid.uuid4())
         
@@ -164,10 +166,11 @@ class YtDlpService:
 
         # Get FFmpeg location if available locally
         ffmpeg_opts = ffmpeg_utils.get_ydl_ffmpeg_opts()
+        outtmpl = str(downloads_dir / f"{file_token}_%(title)s.%(ext)s")
         
         ydl_opts = {
             'progress_hooks': [progress_hook],
-            'outtmpl': f'downloads/{file_token}_%(title)s.%(ext)s',
+            'outtmpl': outtmpl,
             'format': format_str,
             'noplaylist': True,
             **ext_args,
@@ -213,7 +216,7 @@ class YtDlpService:
                     # Fallback: use 'best' format (single stream, no merge needed)
                     fallback_opts = {
                         'progress_hooks': [progress_hook],
-                        'outtmpl': f'downloads/{file_token}_%(title)s.%(ext)s',
+                        'outtmpl': outtmpl,
                         'format': 'best',
                         'noplaylist': True,
                         **ffmpeg_opts

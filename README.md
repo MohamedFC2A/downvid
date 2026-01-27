@@ -72,6 +72,16 @@ npm run dev
 # App runs at http://localhost:3000
 ```
 
+## 🚆 Deploy on Railway
+
+Railway can deploy this repo directly using the included `Dockerfile` (single service: FastAPI serves the static Next.js export).
+
+1. Create a new Railway project → **Deploy from GitHub repo**
+2. Ensure Railway detects the `Dockerfile` (or it will use `railway.json`)
+3. Set environment variables:
+   - `DEEPSEEK_API_KEY` (required for AI features)
+4. Deploy — Railway will provide a public URL (the app listens on `PORT` automatically)
+
 ## 📂 Project Structure
 
 ```text

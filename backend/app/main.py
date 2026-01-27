@@ -1,10 +1,8 @@
 import logging
-import os
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
 from app.api import endpoints
 from app.core.config import settings
 from app.services import ffmpeg_utils
@@ -30,17 +28,14 @@ app.add_middleware(
 # Include API routes first (takes priority over static files)
 app.include_router(endpoints.router, prefix="/api")
 
-# Determine frontend path - use environment variable or default
-# In Docker: /app/frontend/out
-# In development: relative to this file
-FRONTEND_OUT_PATH = os.environ.get(
-    "FRONTEND_PATH",
-    str(Path(__file__).parent.parent.parent / "frontend" / "out")
-)
-frontend_path = Path(FRONTEND_OUT_PATH)
+# Determine frontend path - use Settings/env (container-friendly)
+frontend_path = Path(settings.FRONTEND_PATH)
 
 logger.info(f"Frontend path configured as: {frontend_path}")
 logger.info(f"Frontend path exists: {frontend_path.exists()}")
+
+downloads_path = Path(settings.DOWNLOADS_DIR)
+logger.info(f"Downloads path configured as: {downloads_path}")
 
 
 @app.on_event("startup")
@@ -61,6 +56,13 @@ async def startup_event():
             logger.info("✓ FFmpeg installed successfully!")
         else:
             logger.warning("⚠ FFmpeg could not be installed.")
+
+    # Ensure downloads directory exists
+    try:
+        downloads_path.mkdir(parents=True, exist_ok=True)
+        logger.info(f"✓ Downloads directory ready at: {downloads_path}")
+    except Exception as e:
+        logger.warning(f"⚠ Could not create downloads directory at {downloads_path}: {e}")
     
     # Check frontend static files
     if frontend_path.exists():
@@ -74,42 +76,19 @@ async def startup_event():
     else:
         logger.warning(f"⚠ Frontend static files NOT found at: {frontend_path}")
 
-
-@app.get("/")
-async def serve_index():
-    """Serve the frontend index.html for root path."""
-    index_file = frontend_path / "index.html"
-    
-    logger.info(f"Serving root path, looking for: {index_file}")
-    
-    if index_file.exists():
-        logger.info("Serving index.html")
-        return FileResponse(index_file, media_type="text/html")
-    
-    # Fallback with helpful debug info
-    logger.warning(f"index.html not found at {index_file}")
-    return {
-        "message": "DOWNVID API Running",
-        "status": "ok",
-        "frontend": "not_found",
-        "expected_path": str(index_file),
-        "frontend_dir_exists": frontend_path.exists()
-    }
-
-
-# Mount frontend static files if they exist
+# Mount frontend static export at the web root (if present).
+# This serves `/`, `/tool`, `/_next/*`, etc. while `/api/*` remains handled by the router above.
 if frontend_path.exists():
-    logger.info("Mounting frontend static files...")
-    
-    # Mount _next directory for Next.js assets
-    next_static = frontend_path / "_next"
-    if next_static.exists():
-        app.mount("/_next", StaticFiles(directory=str(next_static)), name="next-static")
-        logger.info(f"  Mounted /_next from {next_static}")
-    
-    # Mount root for other static files (but don't override API routes)
-    # Using html=True enables serving index.html for directory requests
-    app.mount("/static", StaticFiles(directory=str(frontend_path)), name="frontend-static")
-    logger.info(f"  Mounted /static from {frontend_path}")
+    logger.info("Mounting frontend static files at / ...")
+    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
 else:
     logger.warning("Frontend path does not exist - static files not mounted")
+
+    @app.get("/")
+    async def root_status():
+        return {
+            "message": "DOWNVID API Running",
+            "status": "ok",
+            "frontend": "not_found",
+            "frontend_path": str(frontend_path),
+        }
