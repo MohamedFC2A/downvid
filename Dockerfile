@@ -62,7 +62,7 @@ COPY --from=frontend-builder /app/frontend/out ./frontend/out
 RUN echo "=== Frontend out directory contents ===" && \
     ls -la /app/frontend/out/ && \
     echo "=== _next directory ===" && \
-    ls -la /app/frontend/out/_next/ 2>/dev/null || echo "No _next directory"
+    ls -la /app/frontend/out/_next/
 
 # Create required directories
 RUN mkdir -p /app/downloads
