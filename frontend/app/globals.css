@@ -1,13 +1,18 @@
 @import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
 
 @theme {
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: 'Geist Mono', 'Courier New', Courier, monospace;
+  --font-sans: "Space Grotesk", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Fraunces", "Times New Roman", serif;
+  --font-mono: "Geist Mono", "Courier New", Courier, monospace;
 }
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
+  --background: #06070b;
+  --foreground: #f8f7f4;
+  --ember: #ffb457;
+  --glow: #f35b4a;
+  --deep: #10121a;
 }
 
 body {
@@ -17,6 +22,11 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Base helpers */
+.font-display {
+  font-family: var(--font-display);
 }
 
 /* Custom Utilities */
@@ -39,6 +49,19 @@ body {
   filter: blur(24px);
 }
 
+@utility bg-ember {
+  background: radial-gradient(1200px circle at 20% 10%, rgba(255, 180, 87, 0.25), transparent 60%),
+              radial-gradient(900px circle at 85% 20%, rgba(243, 91, 74, 0.28), transparent 55%),
+              radial-gradient(700px circle at 60% 80%, rgba(255, 122, 89, 0.18), transparent 55%),
+              linear-gradient(120deg, #07080c 0%, #0d1018 45%, #0c0f18 100%);
+}
+
+@utility bg-noise {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='.4'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  mix-blend-mode: soft-light;
+}
+
 /* Animations */
 @keyframes spotlight {
   0% {
@@ -54,4 +77,35 @@ body {
 
 .animate-spotlight {
   animation: spotlight 2s ease .75s 1 forwards;
+}
+
+@keyframes float-slow {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-18px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 8s ease-in-out infinite;
+}
+
+@keyframes rise {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rise {
+  animation: rise 0.8s ease both;
 }

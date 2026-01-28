@@ -252,46 +252,37 @@ class YtDlpService:
         audio_formats = []
         
         # Process Video Formats
-        # We prefer video-only (best quality) but we MUST also include muxed formats
-        # because some videos only expose progressive/mp4 (v+a) streams.
-        # Show unique combos per (height, ext, kind) to make selection clearer.
-        seen = set()
+        # Include all video-only and muxed formats (no dedupe) so every available quality is selectable.
         formats_sorted = sorted(formats, key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
-        
         for f in formats_sorted:
-            if self._is_video_only(f) or self._is_muxed_av(f):
-                height = f.get('height')
-                if not height: continue
-                
-                res_str = f"{height}p"
-                ext = f.get('ext')
-                if not ext: 
-                    continue
-                kind = "muxed" if self._is_muxed_av(f) else "video"
-                sig = (int(height), ext, kind)
-                if sig in seen:
-                    continue
-                
-                valid_ext = ext in ['mp4', 'webm', 'mkv', 'mov']
-                if not valid_ext: continue
-                
-                filesize = f.get('filesize') or f.get('filesize_approx')
-                note = f.get('format_note', '') or ''
-                if kind == "muxed" and "mux" not in note.lower():
-                    note = (note + " • Muxed").strip(" •")
-                
-                available_formats.append(VideoFormat(
-                    format_id=f['format_id'],
+            if not (self._is_video_only(f) or self._is_muxed_av(f)):
+                continue
+
+            ext = f.get('ext') or 'unknown'
+            height = f.get('height')
+            res_str = f"{height}p" if height else (f.get('format_note') or "Video")
+            filesize = f.get('filesize') or f.get('filesize_approx')
+            note = f.get('format_note', '') or ''
+            kind = "Muxed" if self._is_muxed_av(f) else "Video-only"
+            if kind.lower() not in note.lower():
+                note = (note + f" • {kind}").strip(" •")
+            if f.get("fps"):
+                fps_val = int(round(float(f.get("fps"))))
+                note = (note + f" • {fps_val}fps").strip(" •")
+
+            available_formats.append(
+                VideoFormat(
+                    format_id=str(f.get('format_id')),
                     resolution=res_str,
                     extension=ext,
                     filesize_str=self._format_filesize(filesize),
                     note=note,
-                    height=int(height),
+                    height=int(height) if height else None,
                     fps=f.get("fps"),
                     vcodec=f.get("vcodec"),
                     acodec=f.get("acodec"),
-                ))
-                seen.add(sig)
+                )
+            )
 
         # Process Audio Formats
         for f in formats:
@@ -311,9 +302,8 @@ class YtDlpService:
                     acodec=f.get("acodec"),
                 ))
 
-        # Prefer higher bitrate audio options; keep a small list for UI.
-        audio_formats_sorted = sorted(audio_formats, key=lambda x: (x.abr or 0, x.filesize_str), reverse=True)
-        final_audio_formats = audio_formats_sorted[:6]
+        # Prefer higher bitrate audio options; keep all formats for UI.
+        final_audio_formats = sorted(audio_formats, key=lambda x: (x.abr or 0, x.filesize_str), reverse=True)
 
         # Fallback: if no video formats matched filters, include a few raw video formats
         if not available_formats and formats:

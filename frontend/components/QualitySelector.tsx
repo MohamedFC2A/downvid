@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export interface VideoFormat {
@@ -19,43 +18,43 @@ export interface VideoFormat {
 interface QualitySelectorProps {
     availableFormats: VideoFormat[];
     audioFormats: VideoFormat[];
+    mode: 'video' | 'audio';
+    selectedId: string | null;
     onSelect: (formatId: string, mode: 'video' | 'audio') => void;
+    onModeChange: (mode: 'video' | 'audio') => void;
 }
 
-export function QualitySelector({ availableFormats, audioFormats, onSelect }: QualitySelectorProps) {
-    const [mode, setMode] = useState<'video' | 'audio'>('video');
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+export function QualitySelector({
+    availableFormats,
+    audioFormats,
+    mode,
+    selectedId,
+    onSelect,
+    onModeChange,
+}: QualitySelectorProps) {
+    const formats = mode === 'video' ? availableFormats : audioFormats;
 
     const handleSelect = (id: string) => {
-        setSelectedId(id);
         onSelect(id, mode);
     };
-
-    const handleModeChange = (newMode: 'video' | 'audio') => {
-        setMode(newMode);
-        setSelectedId(null);
-        // Maybe auto-select the first one?
-    };
-
-    const formats = mode === 'video' ? availableFormats : audioFormats;
 
     return (
         <div className="w-full bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-4">
             {/* Mode Switcher */}
-            <div className="flex p-1 bg-zinc-900 rounded-lg">
+            <div className="flex p-1 bg-black/40 rounded-lg border border-white/10">
                 <button
-                    onClick={() => handleModeChange('video')}
+                    onClick={() => onModeChange('video')}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${mode === 'video'
-                            ? 'bg-zinc-800 text-white shadow-sm'
+                            ? 'bg-white text-black shadow-sm'
                             : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                 >
                     Video
                 </button>
                 <button
-                    onClick={() => handleModeChange('audio')}
+                    onClick={() => onModeChange('audio')}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${mode === 'audio'
-                            ? 'bg-zinc-800 text-white shadow-sm'
+                            ? 'bg-white text-black shadow-sm'
                             : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                 >
@@ -64,7 +63,7 @@ export function QualitySelector({ availableFormats, audioFormats, onSelect }: Qu
             </div>
 
             {/* Format List */}
-            <div className="space-y-2 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800">
+            <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800">
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={mode}
@@ -83,25 +82,32 @@ export function QualitySelector({ availableFormats, audioFormats, onSelect }: Qu
                                 <button
                                     key={fmt.format_id}
                                     onClick={() => handleSelect(fmt.format_id)}
-                                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-sm transition-all border ${selectedId === fmt.format_id
-                                            ? 'bg-zinc-100 text-black border-transparent font-medium'
-                                            : 'bg-zinc-900/50 text-zinc-300 border-transparent hover:bg-zinc-800 hover:text-white'
+                                    className={`w-full flex flex-col gap-2 px-4 py-3 rounded-lg text-sm transition-all border ${selectedId === fmt.format_id
+                                            ? 'bg-white text-black border-transparent font-medium'
+                                            : 'bg-black/40 text-zinc-200 border-white/10 hover:border-white/30 hover:bg-white/5'
                                         }`}
                                 >
-                                    <div className="flex items-center gap-2">
-                                        <span>{fmt.resolution}</span>
-                                        {fmt.extension && (
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedId === fmt.format_id
-                                                    ? 'bg-black/10 text-black/70'
-                                                    : 'bg-zinc-800 text-zinc-500'
-                                                }`}>
-                                                {fmt.extension.toUpperCase()}
-                                            </span>
-                                        )}
+                                    <div className="w-full flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-base font-semibold">{fmt.resolution}</span>
+                                            {fmt.extension && (
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedId === fmt.format_id
+                                                        ? 'bg-black/10 text-black/70'
+                                                        : 'bg-white/10 text-zinc-400'
+                                                    }`}>
+                                                    {fmt.extension.toUpperCase()}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <span className={selectedId === fmt.format_id ? 'text-black/70' : 'text-zinc-500'}>
+                                            {fmt.filesize_str}
+                                        </span>
                                     </div>
-                                    <span className={selectedId === fmt.format_id ? 'text-black/70' : 'text-zinc-500'}>
-                                        {fmt.filesize_str}
-                                    </span>
+                                    <div className={`w-full text-left text-xs ${selectedId === fmt.format_id ? 'text-black/60' : 'text-zinc-500'}`}>
+                                        {[fmt.note, fmt.vcodec, fmt.acodec]
+                                            .filter((val) => val && val !== "none")
+                                            .join(" • ") || "Standard"}
+                                    </div>
                                 </button>
                             ))
                         )}

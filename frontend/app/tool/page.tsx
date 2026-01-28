@@ -63,13 +63,18 @@ export default function ToolPage() {
             const raw = window.localStorage.getItem(LAST_SELECTION_KEY);
             if (!raw) return;
             const j = JSON.parse(raw);
-            if (j.mode === "audio") setDownloadMode("audio");
+            if (j.mode === "audio" || j.mode === "video") {
+                setDownloadMode(j.mode);
+            }
+            if (typeof j.formatId === "string" && j.formatId.length > 0) {
+                setSelectedFormatId(j.formatId);
+            }
         } catch {
             // ignore
         }
     }, []);
 
-    function persistSelection(mode: "video" | "audio", formatId: string) {
+    function persistSelection(mode: "video" | "audio", formatId: string | null) {
         try {
             window.localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify({ mode, formatId }));
         } catch {
@@ -95,6 +100,17 @@ export default function ToolPage() {
             setAnalysisData(data.analysis);
             setAvailableFormats(data.available_formats || []);
             setAudioFormats(data.audio_formats || []);
+            const videoIds = new Set((data.available_formats || []).map((f) => f.format_id));
+            const audioIds = new Set((data.audio_formats || []).map((f) => f.format_id));
+            if (downloadMode === "video" && selectedFormatId && !videoIds.has(selectedFormatId)) {
+                setSelectedFormatId(null);
+            }
+            if (downloadMode === "audio" && selectedFormatId && !audioIds.has(selectedFormatId)) {
+                setSelectedFormatId(null);
+            }
+            if (downloadMode === "audio" && audioIds.size === 0 && videoIds.size > 0) {
+                setDownloadMode("video");
+            }
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "Analysis failed";
             setLastErrorStage("analyze");
@@ -130,7 +146,7 @@ export default function ToolPage() {
                         <Logo />
                     </div>
                     <p className="text-zinc-400 text-sm tracking-[0.3em] uppercase font-mono">
-                        Liquid Glass Downloader
+                        Downvid Control Room
                     </p>
                 </div>
 
@@ -210,6 +226,13 @@ export default function ToolPage() {
                                         <QualitySelector
                                             availableFormats={availableFormats}
                                             audioFormats={audioFormats}
+                                            mode={downloadMode}
+                                            selectedId={selectedFormatId}
+                                            onModeChange={(newMode) => {
+                                                setDownloadMode(newMode);
+                                                setSelectedFormatId(null);
+                                                persistSelection(newMode, null);
+                                            }}
                                             onSelect={(id, mode) => {
                                                 setSelectedFormatId(id);
                                                 setDownloadMode(mode);
