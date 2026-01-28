@@ -137,8 +137,21 @@ class YtDlpService:
 
     async def get_video_info(self, url: str):
         loop = asyncio.get_running_loop()
-        ydl_opts = {'quiet': True, 'noplaylist': True}
+        # Try to find a cookies file
+        cookies_path = Path("backend/cookies.txt")
+        if not cookies_path.exists():
+            cookies_path = Path("cookies.txt")
+
+        ydl_opts = {
+            'quiet': True, 
+            'noplaylist': True,
+            'nocheckcertificate': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        }
         
+        if cookies_path.exists():
+             ydl_opts['cookiefile'] = str(cookies_path)
+             
         def fetch_info():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(url, download=False)
@@ -248,7 +261,21 @@ class YtDlpService:
         info_for_choice: Optional[dict] = None
         formats_for_choice: list[dict] = []
         try:
-            ydl_info_opts = {"quiet": True, "noplaylist": True}
+            # Try to find a cookies file
+            cookies_path = Path("backend/cookies.txt")
+            if not cookies_path.exists():
+                cookies_path = Path("cookies.txt")
+
+            ydl_info_opts = {
+                "quiet": True, 
+                "noplaylist": True,
+                "nocheckcertificate": True,
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            }
+            
+            if cookies_path.exists():
+                 ydl_info_opts['cookiefile'] = str(cookies_path)
+
             def _extract():
                 with yt_dlp.YoutubeDL(ydl_info_opts) as ydl:
                     return ydl.extract_info(url, download=False)
@@ -384,14 +411,25 @@ class YtDlpService:
         
         async def do_download(format_str: str, extra_opts: dict) -> tuple[str, str]:
             """Execute download with given options, return (token, filepath)."""
+            # Try to find a cookies file
+            cookies_path = Path("backend/cookies.txt")
+            if not cookies_path.exists():
+                cookies_path = Path("cookies.txt")
+
             opts = {
                 "progress_hooks": [progress_hook],
                 "outtmpl": outtmpl,
                 "format": format_str,
                 "noplaylist": True,
+                "nocheckcertificate": True,
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 **extra_opts,
                 **ffmpeg_opts,
             }
+            
+            if cookies_path.exists():
+                 opts['cookiefile'] = str(cookies_path)
+
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=True))
 
