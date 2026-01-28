@@ -9,6 +9,11 @@ export interface VideoFormat {
     filesize_str: string;
     note: string;
     extension: string;
+    height?: number;
+    fps?: number;
+    vcodec?: string;
+    acodec?: string;
+    abr?: number;
 }
 
 interface QualitySelectorProps {

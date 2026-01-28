@@ -19,5 +19,8 @@ class Settings:
         "DOWNLOADS_DIR",
         str(Path(__file__).resolve().parents[3] / "downloads"),
     )
+
+    # Admin/debug
+    ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "")
     
 settings = Settings()

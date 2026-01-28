@@ -1,92 +1,259 @@
 'use client';
-import { useState, useEffect, useRef } from "react";
-import { URLInput } from "@/components/modules/downloader/URLInput";
-import { VideoPreview } from "@/components/modules/downloader/VideoPreview";
-import { ProgressBar } from "@/components/modules/downloader/ProgressBar";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { InsightsPanel } from "@/components/modules/ai/InsightsPanel";
-import { QualitySelector, VideoFormat } from "@/components/QualitySelector";
-import { analyzeVideo } from "@/lib/api";
+import type { VideoFormat } from "@/components/QualitySelector";
+import { analyzeVideo, type AnalyzeResult } from "@/lib/api";
 import { WebSocketClient, DownloadStatus } from "@/lib/socket";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
+import { BulkUrlInput } from "@/components/modules/downloader/BulkUrlInput";
+import { DownloadCard, QueueItem } from "@/components/modules/downloader/DownloadCard";
+import { DownloadPrefs } from "@/components/modules/downloader/FormatPicker";
+import { AdminLogsPanel } from "@/components/modules/debug/AdminLogsPanel";
 
-// Loader2 is not used, removing.
+const PREFS_KEY = "downvid:prefs:v1";
+
+function loadPrefs(): DownloadPrefs {
+    if (typeof window === "undefined") return { mode: "video", container: "mp4", height: 1080 };
+    try {
+        const raw = window.localStorage.getItem(PREFS_KEY);
+        if (!raw) return { mode: "video", container: "mp4", height: 1080 };
+        const j = JSON.parse(raw);
+        return {
+            mode: j.mode === "audio" ? "audio" : "video",
+            container: ["mp4", "webm", "mp3", "m4a"].includes(j.container) ? j.container : "mp4",
+            height: typeof j.height === "number" ? j.height : 1080,
+        };
+    } catch {
+        return { mode: "video", container: "mp4", height: 1080 };
+    }
+}
+
+function savePrefs(p: DownloadPrefs) {
+    try {
+        window.localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+    } catch {
+        // ignore
+    }
+}
+
+function pickClosest(formats: VideoFormat[], prefs: DownloadPrefs): string | null {
+    if (!formats || formats.length === 0) return null;
+    const container = prefs.mode === "audio" && prefs.container === "mp3" ? "" : prefs.container;
+    const candidates = container ? formats.filter((f) => f.extension === container) : formats;
+    const list = candidates.length ? candidates : formats;
+
+    const withHeight = list
+        .map((f) => ({ f, h: f.height }))
+        .filter((x) => typeof x.h === "number" && x.h > 0);
+
+    if (prefs.mode === "video" && withHeight.length) {
+        withHeight.sort((a, b) => {
+            const da = Math.abs(prefs.height - (a.h || 0));
+            const db = Math.abs(prefs.height - (b.h || 0));
+            if (da !== db) return da - db;
+            return (b.h || 0) - (a.h || 0);
+        });
+        return withHeight[0].f.format_id;
+    }
+
+    return list[0].format_id;
+}
 
 export default function ToolPage() {
-    const [clientId] = useState(() => Math.random().toString(36).substring(7));
-    const [status, setStatus] = useState<DownloadStatus>({ status: 'idle', percent: 0 });
+    const [prefs, setPrefs] = useState<DownloadPrefs>(() => loadPrefs());
+    const [queue, setQueue] = useState<QueueItem[]>([]);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [showAdmin, setShowAdmin] = useState(false);
+    const [bulkRun, setBulkRun] = useState(false);
 
-    // Analysis State
-    const [analysisData, setAnalysisData] = useState<any>(null);
-    const [videoInfo, setVideoInfo] = useState<{ title: string, thumbnail: string, description?: string } | null>(null);
-    const [availableFormats, setAvailableFormats] = useState<VideoFormat[]>([]);
-    const [audioFormats, setAudioFormats] = useState<VideoFormat[]>([]);
-
-    // User Selection State
-    const [selectedFormatId, setSelectedFormatId] = useState<string | null>(null);
-    const [downloadMode, setDownloadMode] = useState<'video' | 'audio'>('video');
-    const [currentUrl, setCurrentUrl] = useState<string>("");
-
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const wsRef = useRef<WebSocketClient | null>(null);
+    // per-item websocket clients
+    const wsMapRef = useRef<Map<string, WebSocketClient>>(new Map());
+    const queueRef = useRef<QueueItem[]>([]);
+    const idSeqRef = useRef(0);
+    const completionRef = useRef<Map<string, () => void>>(new Map());
 
     useEffect(() => {
-        wsRef.current = new WebSocketClient(clientId, (data) => {
-            setStatus(prev => ({ ...prev, ...data }));
+        queueRef.current = queue;
+    }, [queue]);
 
-            if (data.status === 'completed' && data.file_token) {
-                // Trigger download
+    const selected = useMemo(() => queue.find((q) => q.id === selectedId) || null, [queue, selectedId]);
+
+    function startDownload(id: string) {
+        const item = queueRef.current.find((q) => q.id === id);
+        if (!item || item.isAnalyzing) return;
+
+        // Close any existing socket for this item (restart scenario)
+        const old = wsMapRef.current.get(id);
+        old?.close();
+        wsMapRef.current.delete(id);
+
+        const clientId = `${id}-${Math.random().toString(36).slice(2)}`;
+        const ws = new WebSocketClient(clientId, (data: DownloadStatus) => {
+            setQueue((prev) =>
+                prev.map((q) => {
+                    if (q.id !== id) return q;
+                    return {
+                        ...q,
+                        status: data.status || q.status,
+                        percent: typeof data.percent === "number" ? data.percent : q.percent,
+                        speed: data.speed || q.speed,
+                        eta: data.eta || q.eta,
+                        error: data.error || q.error,
+                        isDownloading: data.status !== "completed" && data.status !== "error",
+                    };
+                })
+            );
+
+            if (data.status === "completed" && data.file_token) {
                 const downloadUrl = `/api/file/serve/${data.file_token}`;
-                const link = document.createElement('a');
+                const link = document.createElement("a");
                 link.href = downloadUrl;
-                link.setAttribute('download', data.filename || 'download'); // filenames handled by server header usually
+                link.setAttribute("download", data.filename || "download");
                 document.body.appendChild(link);
                 link.click();
                 link.remove();
             }
+
+            if (data.status === "completed" || data.status === "error") {
+                const done = completionRef.current.get(id);
+                if (done) {
+                    completionRef.current.delete(id);
+                    done();
+                }
+            }
         });
-        wsRef.current.connect();
 
-        return () => {
-            wsRef.current?.close();
-        };
-    }, [clientId]);
+        wsMapRef.current.set(id, ws);
+        ws.connect();
 
-    const handleUrlSubmit = async (url: string) => {
-        setIsAnalyzing(true);
-        setAnalysisData(null);
-        setVideoInfo(null);
-        setAvailableFormats([]);
-        setAudioFormats([]);
-        setSelectedFormatId(null);
-        setStatus({ status: 'idle', percent: 0 }); // Reset status
-        setCurrentUrl(url);
+        const chosenId =
+            item.prefs.mode === "video" ? pickClosest(item.availableFormats, item.prefs) : pickClosest(item.audioFormats, item.prefs);
 
+        setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, status: "initializing", percent: 0, isDownloading: true } : q)));
+
+        ws.sendDownloadSpec(item.url, {
+            mode: item.prefs.mode,
+            container: item.prefs.container,
+            height: item.prefs.mode === "video" ? item.prefs.height : undefined,
+            format_id: chosenId || undefined,
+        });
+    }
+
+    function waitForCompletion(id: string): Promise<void> {
+        const current = queueRef.current.find((q) => q.id === id);
+        if (!current) return Promise.resolve();
+        if (current.status === "completed" || current.status === "error") return Promise.resolve();
+        return new Promise((resolve) => {
+            completionRef.current.set(id, resolve);
+        });
+    }
+
+    async function downloadAll() {
+        setBulkRun(true);
         try {
-            const data = await analyzeVideo(url);
-
-            setVideoInfo({
-                title: data.title,
-                thumbnail: data.thumbnail,
-                description: data.description
-            });
-            setAnalysisData(data.analysis);
-            setAvailableFormats(data.available_formats || []);
-            setAudioFormats(data.audio_formats || []); // Ensure backend returns snake_case
-
-        } catch (e: any) {
-            console.error(e);
-            setStatus({ status: 'error', percent: 0, error: e.message || 'Analysis Failed' });
+            for (const item of queueRef.current) {
+                if (item.isAnalyzing) continue;
+                if (item.status === "completed") continue;
+                startDownload(item.id);
+                await waitForCompletion(item.id);
+            }
         } finally {
-            setIsAnalyzing(false);
+            setBulkRun(false);
+        }
+    }
+
+    const addUrls = async (urls: string[]) => {
+        const nextItems: QueueItem[] = urls.map((url, idx) => ({
+            id: `q${idSeqRef.current + 1 + idx}`,
+            url,
+            title: "",
+            thumbnail: "",
+            availableFormats: [],
+            audioFormats: [],
+            prefs,
+            status: "idle",
+            percent: 0,
+            isAnalyzing: true,
+            isDownloading: false,
+        }));
+        idSeqRef.current += nextItems.length;
+
+        setQueue((prev) => [...nextItems, ...prev]);
+        if (!selectedId && nextItems.length) setSelectedId(nextItems[0].id);
+
+        // analyze sequentially to avoid rate-limits
+        for (const it of nextItems) {
+            await analyzeItem(it.id, it.url);
         }
     };
 
-    const handleDownload = () => {
-        if (!currentUrl || !selectedFormatId || !wsRef.current) return;
+    const analyzeItem = async (id: string, urlOverride?: string) => {
+        setQueue((prev) =>
+            prev.map((q) => (q.id === id ? { ...q, isAnalyzing: true, status: "idle", percent: 0, error: undefined } : q))
+        );
+        const url = urlOverride || queueRef.current.find((q) => q.id === id)?.url;
+        if (!url) return;
 
-        setStatus({ status: 'initializing', percent: 0, speed: 'Starting...' });
-        wsRef.current.sendDownloadCommand(currentUrl, selectedFormatId, downloadMode);
+        try {
+            const data: AnalyzeResult = await analyzeVideo(url);
+            const available = (data.available_formats || []) as VideoFormat[];
+            const audio = (data.audio_formats || []) as VideoFormat[];
+
+            setQueue((prev) =>
+                prev.map((q) =>
+                    q.id === id
+                        ? {
+                            ...q,
+                            title: data.title,
+                            thumbnail: data.thumbnail,
+                            description: data.description,
+                            analysisData: data.analysis,
+                            availableFormats: available,
+                            audioFormats: audio,
+                            isAnalyzing: false,
+                        }
+                        : q
+                )
+            );
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : "Analysis failed";
+            setQueue((prev) =>
+                prev.map((q) =>
+                    q.id === id
+                        ? { ...q, isAnalyzing: false, status: "error", percent: 0, error: msg }
+                        : q
+                )
+            );
+        }
+    };
+
+    const updateItemPrefs = (id: string, next: DownloadPrefs) => {
+        setPrefs(next);
+        savePrefs(next);
+        setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, prefs: next } : q)));
+    };
+
+    const removeItem = (id: string) => {
+        const ws = wsMapRef.current.get(id);
+        ws?.close();
+        wsMapRef.current.delete(id);
+        setQueue((prev) => prev.filter((q) => q.id !== id));
+        if (selectedId === id) setSelectedId(null);
+    };
+
+    const clearQueue = () => {
+        for (const ws of wsMapRef.current.values()) {
+            try {
+                ws.close();
+            } catch {
+                // ignore
+            }
+        }
+        wsMapRef.current.clear();
+        setQueue([]);
+        setSelectedId(null);
+        setBulkRun(false);
     };
 
     return (
@@ -101,87 +268,52 @@ export default function ToolPage() {
                     </p>
                 </div>
 
-                <div className="flex justify-center w-full">
-                    <URLInput
-                        onUrlSubmit={handleUrlSubmit}
-                    />
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <Button
+                        variant="secondary"
+                        className="h-11 px-5 text-sm"
+                        onClick={() => setShowAdmin((v) => !v)}
+                    >
+                        {showAdmin ? "Hide" : "Show"} Debug
+                    </Button>
+                    <Button
+                        className="h-11 px-6 text-sm font-semibold"
+                        onClick={downloadAll}
+                        disabled={queue.length === 0 || queue.some((q) => q.isAnalyzing)}
+                    >
+                        {bulkRun ? "Running..." : "Download All"}
+                    </Button>
+                    <Button variant="secondary" className="h-11 px-6 text-sm" onClick={clearQueue} disabled={queue.length === 0}>
+                        Clear Queue
+                    </Button>
                 </div>
 
-                {/* Error Display */}
-                {status.status === 'error' && (
-                    <div className="text-red-500 bg-red-500/10 p-4 rounded-lg text-center border border-red-500/20">
-                        {status.error || "An error occurred"}
-                    </div>
-                )}
+                <BulkUrlInput onAddUrls={addUrls} />
 
-                {/* Content Logic */}
-                {(videoInfo || isAnalyzing) && (
+                {queue.length > 0 && (
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start fade-in-up">
-
-                        {/* Left Column: Preview & Controls (7 cols) */}
-                        <div className="lg:col-span-7 space-y-6">
-                            {/* Video Preview */}
-                            {videoInfo && (
-                                <VideoPreview
-                                    title={videoInfo.title}
-                                    thumbnail={videoInfo.thumbnail}
-                                />
-                            )}
-
-                            {/* Format Selector */}
-                            {!isAnalyzing && videoInfo && (
-                                <QualitySelector
-                                    availableFormats={availableFormats}
-                                    audioFormats={audioFormats}
-                                    onSelect={(id: string, mode: 'video' | 'audio') => {
-                                        setSelectedFormatId(id);
-                                        setDownloadMode(mode);
-                                    }}
-                                />
-                            )}
-
-                            {/* Download Action Area */}
-                            {!isAnalyzing && videoInfo && (
-                                <div className="pt-4">
-                                    {status.status === 'idle' || status.status === 'error' || status.status === 'completed' ? (
-                                        <Button
-                                            onClick={handleDownload}
-                                            disabled={!selectedFormatId}
-                                            className={`w-full h-14 text-lg font-bold rounded-lg transition-all ${selectedFormatId
-                                                ? 'bg-white text-black hover:bg-zinc-200 shadow-[0_0_20px_rgba(255,255,255,0.2)]'
-                                                : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                                                }`}
-                                        >
-                                            {selectedFormatId ? 'Start Extraction' : 'Select Format to Download'}
-                                        </Button>
-                                    ) : (
-                                        // Progress Bar
-                                        <div className="p-6 bg-zinc-950/50 border border-zinc-900 rounded-xl">
-                                            <ProgressBar
-                                                progress={status.percent}
-                                                status={status.status}
-                                                speed={status.speed}
-                                            />
-                                        </div>
-                                    )}
+                        <div className="lg:col-span-7 space-y-4">
+                            {queue.map((item) => (
+                                <div key={item.id} onClick={() => setSelectedId(item.id)} className="cursor-pointer">
+                                    <DownloadCard
+                                        item={item}
+                                        onChangePrefs={updateItemPrefs}
+                                        onAnalyze={analyzeItem}
+                                        onStart={startDownload}
+                                        onRemove={removeItem}
+                                    />
                                 </div>
-                            )}
-
-                            {/* Loading State */}
-                            {isAnalyzing && (
-                                <div className="h-64 flex items-center justify-center bg-zinc-900/10 rounded-xl border border-zinc-800 border-dashed">
-                                    <div className="flex flex-col items-center gap-4 text-zinc-500">
-                                        <div className="animate-spin h-8 w-8 border-2 border-zinc-500 border-t-transparent rounded-full" />
-                                        <p>Analyzing Metadata...</p>
-                                    </div>
-                                </div>
-                            )}
-
+                            ))}
                         </div>
 
-                        {/* Right Column: AI Insights (5 cols) */}
-                        <div className="lg:col-span-5 h-full">
-                            <InsightsPanel data={analysisData} isLoading={isAnalyzing} />
+                        <div className="lg:col-span-5 space-y-6">
+                            <AdminLogsPanel enabled={showAdmin} />
+                            <InsightsPanel data={selected?.analysisData || null} isLoading={false} />
+                            {!selected && (
+                                <div className="text-zinc-600 text-sm font-mono text-center border border-zinc-800 rounded-xl p-6 bg-zinc-950/30">
+                                    Select an item to see details
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

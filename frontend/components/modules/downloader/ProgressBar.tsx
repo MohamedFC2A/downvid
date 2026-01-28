@@ -5,14 +5,15 @@ interface ProgressBarProps {
     progress: number; // 0 to 100
     status: string;
     speed?: string;
+    eta?: string;
 }
 
-export function ProgressBar({ progress, status, speed }: ProgressBarProps) {
+export function ProgressBar({ progress, status, speed, eta }: ProgressBarProps) {
     return (
         <div className="w-full space-y-2 font-mono text-xs">
             <div className="flex justify-between text-zinc-400 items-end">
                 <span className="uppercase tracking-wider">{status}</span>
-                <span className="text-zinc-500">{speed}</span>
+                <span className="text-zinc-500">{[speed, eta].filter(Boolean).join(" • ")}</span>
             </div>
             <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
                 <motion.div

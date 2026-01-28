@@ -1,6 +1,16 @@
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL
-    ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api`
-    : "/api";
+import type { VideoFormat } from "@/components/QualitySelector";
+import type { InsightsData } from "@/components/modules/downloader/DownloadCard";
+
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api` : "/api";
+
+export type AnalyzeResult = {
+    title: string;
+    thumbnail?: string;
+    description?: string;
+    analysis: InsightsData;
+    available_formats: VideoFormat[];
+    audio_formats: VideoFormat[];
+};
 
 export async function analyzeVideo(url: string) {
     const res = await fetch(`${API_BASE}/analyze`, {
@@ -9,10 +19,10 @@ export async function analyzeVideo(url: string) {
         body: JSON.stringify({ url }),
     });
     if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.detail || "Analysis failed");
+        const error = await res.json().catch(() => null);
+        throw new Error(error?.detail || "Analysis failed");
     }
-    return res.json();
+    return (await res.json()) as AnalyzeResult;
 }
 
 export async function getFileDownloadUrl(fileToken: string): Promise<string> {

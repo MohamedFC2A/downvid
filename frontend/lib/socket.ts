@@ -5,6 +5,9 @@ export type DownloadStatus = {
     status: string;
     percent: number;
     speed?: string;
+    eta?: string;
+    downloaded_bytes?: number;
+    total_bytes?: number;
     file?: string;
     message?: string;
     error?: string;
@@ -49,7 +52,10 @@ export class WebSocketClient {
     private onMessage: (data: DownloadStatus) => void;
     private clientId: string;
     private reconnectAttempts: number = 0;
-    private maxReconnectAttempts: number = 3;
+    private maxReconnectAttempts: number = 50;
+    private shouldReconnect: boolean = true;
+    private reconnectTimer: number | null = null;
+    private sendQueue: string[] = [];
 
     constructor(clientId: string, onMessage: (data: DownloadStatus) => void) {
         this.clientId = clientId;
@@ -63,6 +69,13 @@ export class WebSocketClient {
             console.log('[WS] Already connected');
             return;
         }
+        if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+            return;
+        }
+        if (this.reconnectTimer) {
+            window.clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
 
         try {
             this.ws = new WebSocket(this.url);
@@ -70,6 +83,16 @@ export class WebSocketClient {
             this.ws.onopen = () => {
                 console.log('[WS] Connected');
                 this.reconnectAttempts = 0;
+                // Flush queued messages
+                const queued = this.sendQueue.splice(0, this.sendQueue.length);
+                for (const msg of queued) {
+                    try {
+                        this.ws?.send(msg);
+                    } catch {
+                        this.sendQueue.unshift(msg);
+                        break;
+                    }
+                }
             };
 
             this.ws.onmessage = (event) => {
@@ -84,6 +107,9 @@ export class WebSocketClient {
             this.ws.onclose = (event) => {
                 console.log(`[WS] Closed (code: ${event.code}, reason: ${event.reason})`);
                 this.ws = null;
+                if (this.shouldReconnect) {
+                    this.scheduleReconnect();
+                }
             };
 
             this.ws.onerror = (err) => {
@@ -93,7 +119,31 @@ export class WebSocketClient {
             };
         } catch (error) {
             console.error('[WS] Connection error:', error);
+            if (this.shouldReconnect) {
+                this.scheduleReconnect();
+            }
         }
+    }
+
+    private scheduleReconnect() {
+        if (!this.shouldReconnect) return;
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.error('[WS] Max reconnect attempts reached');
+            return;
+        }
+
+        const base = 500; // ms
+        const max = 8000; // ms
+        const exp = Math.min(max, base * Math.pow(2, this.reconnectAttempts));
+        const jitter = Math.floor(Math.random() * 250);
+        const delay = exp + jitter;
+        this.reconnectAttempts += 1;
+
+        console.log(`[WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+        this.reconnectTimer = window.setTimeout(() => {
+            this.reconnectTimer = null;
+            this.connect();
+        }, delay);
     }
 
     sendUrl(url: string) {
@@ -109,25 +159,35 @@ export class WebSocketClient {
         });
     }
 
-    private send(data: Record<string, unknown>) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(data));
-        } else {
-            console.warn('[WS] Not open, attempting connect...');
-            this.connect();
+    sendDownloadSpec(url: string, spec: { mode: 'video' | 'audio'; container?: string; height?: number; format_id?: string }) {
+        this.send({
+            action: 'start_download',
+            url,
+            mode: spec.mode,
+            container: spec.container,
+            height: spec.height,
+            format_id: spec.format_id,
+        });
+    }
 
-            // Retry after connection attempt
-            setTimeout(() => {
-                if (this.ws?.readyState === WebSocket.OPEN) {
-                    this.ws.send(JSON.stringify(data));
-                } else {
-                    console.error('[WS] Failed to send - connection not established');
-                }
-            }, 1500);
+    private send(data: Record<string, unknown>) {
+        const payload = JSON.stringify(data);
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(payload);
+            return;
         }
+
+        // Queue and connect
+        this.sendQueue.push(payload);
+        this.connect();
     }
 
     close() {
+        this.shouldReconnect = false;
+        if (this.reconnectTimer) {
+            window.clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         if (this.ws) {
             this.ws.close();
             this.ws = null;
