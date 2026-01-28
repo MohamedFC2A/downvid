@@ -147,8 +147,8 @@ class YtDlpService:
             'noplaylist': True,
             'nocheckcertificate': True,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            # Options to bypass YouTube restrictions - use tv_embedded which works better on cloud
-            'extractor_args': {'youtube': {'player_client': ['tv_embedded', 'web']}},
+            # Options to bypass YouTube restrictions - use android which works better currently
+            'extractor_args': {'youtube': {'player_client': ['android']}},
             'http_headers': {
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
@@ -284,8 +284,8 @@ class YtDlpService:
                 "noplaylist": True,
                 "nocheckcertificate": True,
                 "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                # Options to bypass YouTube restrictions - use tv_embedded which works better on cloud
-                "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web"]}},
+                # Options to bypass YouTube restrictions - use android which works better currently
+                "extractor_args": {"youtube": {"player_client": ["android"]}},
                 "http_headers": {
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language": "en-US,en;q=0.9",
@@ -445,8 +445,8 @@ class YtDlpService:
                 "noplaylist": True,
                 "nocheckcertificate": True,
                 "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                # Options to bypass YouTube restrictions - use tv_embedded which works better on cloud
-                "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web"]}},
+                # Options to bypass YouTube restrictions - use android which works better currently
+                "extractor_args": {"youtube": {"player_client": ["android"]}},
                 "http_headers": {
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language": "en-US,en;q=0.9",
