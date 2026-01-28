@@ -177,6 +177,8 @@ class YtDlpService:
             "sleep_interval": _to_int(sleep_interval, 1),
             "max_sleep_interval": _to_int(max_sleep_interval, 5),
             "geo_bypass": True,
+            "youtube_include_dash_manifest": True,
+            "youtube_include_hls_manifest": True,
             "user_agent": user_agent or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             "http_headers": {
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -257,34 +259,42 @@ class YtDlpService:
         # Process Video Formats
         # Group formats by resolution and select the best format for each quality level
         formats_sorted = sorted(formats, key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
-        
+
+        def _codec_rank(vcodec: Optional[str]) -> int:
+            if not vcodec:
+                return 0
+            v = vcodec.lower()
+            if "av01" in v:
+                return 4
+            if "vp9" in v:
+                return 3
+            if "avc1" in v or "h264" in v:
+                return 2
+            return 1
+
+        def _video_score(f: dict) -> tuple:
+            tbr = float(f.get("tbr") or 0.0)
+            fps = float(f.get("fps") or 0.0)
+            filesize = float(f.get("filesize") or f.get("filesize_approx") or 0.0)
+            codec_rank = _codec_rank(f.get("vcodec"))
+            muxed_bonus = 1 if self._is_muxed_av(f) else 0
+            return (tbr, codec_rank, fps, filesize, muxed_bonus)
+
         # Group by resolution (height) and keep the best format for each
-        quality_groups = {}  # height -> best format
-        
+        quality_groups: dict[int, dict] = {}
+
         for f in formats_sorted:
             if not (self._is_video_only(f) or self._is_muxed_av(f)):
                 continue
-            
+
             height = f.get('height')
             if not height or height <= 0:
                 continue
-            
-            # If this is the first format for this height, or if it's better than the existing one
-            if height not in quality_groups:
+
+            height = int(height)
+            existing = quality_groups.get(height)
+            if existing is None or _video_score(f) > _video_score(existing):
                 quality_groups[height] = f
-            else:
-                # Compare: prefer muxed over video-only, then higher tbr, then larger filesize
-                existing = quality_groups[height]
-                existing_is_muxed = self._is_muxed_av(existing)
-                current_is_muxed = self._is_muxed_av(f)
-                existing_tbr = float(existing.get('tbr') or 0)
-                current_tbr = float(f.get('tbr') or 0)
-                
-                # Prefer muxed formats (they have both video and audio)
-                if current_is_muxed and not existing_is_muxed:
-                    quality_groups[height] = f
-                elif current_is_muxed == existing_is_muxed and current_tbr > existing_tbr:
-                    quality_groups[height] = f
         
         # Convert grouped formats to VideoFormat objects
         for height in sorted(quality_groups.keys(), reverse=True):
@@ -341,6 +351,18 @@ class YtDlpService:
 
         # Prefer higher bitrate audio options; keep all formats for UI.
         final_audio_formats = sorted(audio_formats, key=lambda x: (x.abr or 0, x.filesize_str), reverse=True)
+
+        admin_log.add(
+            "analysis_formats",
+            {
+                "title": info.get("title"),
+                "extractor": info.get("extractor"),
+                "id": info.get("id"),
+                "formats_count": len(formats),
+                "video_qualities": sorted(quality_groups.keys(), reverse=True)[:12],
+                "audio_formats_count": len(final_audio_formats),
+            },
+        )
 
         # Fallback: if no video formats matched filters, try raw extraction with grouping
         if not available_formats and formats:
