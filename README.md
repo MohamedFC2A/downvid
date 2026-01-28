@@ -80,7 +80,34 @@ Railway can deploy this repo directly using the included `Dockerfile` (single se
 2. Ensure Railway detects the `Dockerfile` (or it will use `railway.json`)
 3. Set environment variables:
    - `DEEPSEEK_API_KEY` (required for AI features)
+   - `YTDLP_FORCE_IPV4=1` (helps with some 403 blocks)
+   - `YTDLP_REFERER=https://www.youtube.com/`
+   - `YTDLP_USER_AGENT=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36`
+   - `YTDLP_PROXY` (optional, required if YouTube blocks the server IP)
 4. Deploy — Railway will provide a public URL (the app listens on `PORT` automatically)
+
+### ✅ Fixing YouTube 403 (Railway)
+YouTube blocks many datacenter IPs. The most reliable fix is **cookies**.
+
+**Option A: Cookies (recommended)**
+1. On your local browser (logged in to YouTube), install a cookies exporter extension.
+2. Export cookies in **Netscape format** as `cookies.txt`.
+3. Convert to Base64 and add it to Railway as `YTDLP_COOKIES_B64`.
+
+PowerShell:
+```powershell
+$bytes = [System.IO.File]::ReadAllBytes("cookies.txt")
+[Convert]::ToBase64String($bytes) | Set-Content -NoNewline cookies.b64
+```
+Then copy the content of `cookies.b64` into Railway env var `YTDLP_COOKIES_B64`.
+
+**Option B: Proxy (if cookies not possible)**
+Set `YTDLP_PROXY` to a residential proxy URL.
+
+You can check current status at:
+```text
+/api/diagnostics
+```
 
 ## 📂 Project Structure
 

@@ -144,16 +144,40 @@ class YtDlpService:
     def _common_ydl_opts(self) -> dict:
         proxy = (os.getenv("YTDLP_PROXY") or "").strip()
         impersonate = (os.getenv("YTDLP_IMPERSONATE") or "").strip()
+        force_ipv4 = (os.getenv("YTDLP_FORCE_IPV4") or "").strip().lower() in ("1", "true", "yes")
+        force_ipv6 = (os.getenv("YTDLP_FORCE_IPV6") or "").strip().lower() in ("1", "true", "yes")
+        user_agent = (os.getenv("YTDLP_USER_AGENT") or "").strip()
+        referer = (os.getenv("YTDLP_REFERER") or "").strip()
+        rate_limit = (os.getenv("YTDLP_RATE_LIMIT") or "").strip()
+        sleep_interval = (os.getenv("YTDLP_SLEEP_INTERVAL") or "").strip()
+        max_sleep_interval = (os.getenv("YTDLP_MAX_SLEEP_INTERVAL") or "").strip()
+        extractor_retries = (os.getenv("YTDLP_EXTRACTOR_RETRIES") or "").strip()
+        retries = (os.getenv("YTDLP_RETRIES") or "").strip()
+        fragment_retries = (os.getenv("YTDLP_FRAGMENT_RETRIES") or "").strip()
+        socket_timeout = (os.getenv("YTDLP_SOCKET_TIMEOUT") or "").strip()
+
+        def _to_int(val: str, default: int) -> int:
+            try:
+                return int(val)
+            except Exception:
+                return default
+
+        def _to_float(val: str) -> float | None:
+            try:
+                return float(val)
+            except Exception:
+                return None
+
         opts: dict = {
             "nocheckcertificate": True,
-            "extractor_retries": 3,
-            "retries": 5,
-            "fragment_retries": 5,
-            "socket_timeout": 60,
-            "sleep_interval": 1,
-            "max_sleep_interval": 5,
+            "extractor_retries": _to_int(extractor_retries, 3),
+            "retries": _to_int(retries, 5),
+            "fragment_retries": _to_int(fragment_retries, 5),
+            "socket_timeout": _to_int(socket_timeout, 60),
+            "sleep_interval": _to_int(sleep_interval, 1),
+            "max_sleep_interval": _to_int(max_sleep_interval, 5),
             "geo_bypass": True,
-            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "user_agent": user_agent or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             "http_headers": {
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.9",
@@ -163,9 +187,19 @@ class YtDlpService:
         }
         if proxy:
             opts["proxy"] = proxy
+        if rate_limit:
+            rate_val = _to_float(rate_limit)
+            if rate_val:
+                opts["ratelimit"] = rate_val
         if impersonate:
             # yt-dlp supports `--impersonate` (needs curl-impersonate in some setups)
             opts["impersonate"] = impersonate
+        if referer:
+            opts["http_headers"]["Referer"] = referer
+        if force_ipv4:
+            opts["force_ipv4"] = True
+        if force_ipv6:
+            opts["force_ipv6"] = True
         return opts
 
     async def get_video_info(self, url: str):

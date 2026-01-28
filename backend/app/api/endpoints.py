@@ -11,6 +11,7 @@ from app.services.ytdlp_service import YtDlpService, VideoFormat
 from app.services.deepseek_service import deepseek_service
 import yt_dlp
 import shutil
+import os
 
 router = APIRouter()
 ytdlp_service = YtDlpService()
@@ -194,10 +195,21 @@ async def get_admin_logs(
 async def diagnostics():
     """Lightweight runtime diagnostics (no secrets)."""
     ytdlp_version = getattr(getattr(yt_dlp, "version", None), "__version__", None)
+    env_cookie_path = (os.getenv("YTDLP_COOKIES_PATH") or "").strip()
+    env_cookie_b64 = (os.getenv("YTDLP_COOKIES_B64") or "").strip()
+    cookies_path = Path(env_cookie_path) if env_cookie_path else Path("backend/cookies.txt")
+    if not cookies_path.exists():
+        cookies_path = Path("cookies.txt")
+    has_cookie_file = cookies_path.exists()
     return {
         "yt_dlp_version": ytdlp_version,
         "has_deno": shutil.which("deno") is not None,
         "has_ffmpeg": shutil.which("ffmpeg") is not None,
+        "cookies_env_set": bool(env_cookie_b64 or env_cookie_path),
+        "cookies_file_found": has_cookie_file,
+        "proxy_set": bool((os.getenv("YTDLP_PROXY") or "").strip()),
+        "force_ipv4": (os.getenv("YTDLP_FORCE_IPV4") or "").strip().lower() in ("1", "true", "yes"),
+        "force_ipv6": (os.getenv("YTDLP_FORCE_IPV6") or "").strip().lower() in ("1", "true", "yes"),
     }
 
 
