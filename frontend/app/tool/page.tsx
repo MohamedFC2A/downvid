@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InsightsPanel } from "@/components/modules/ai/InsightsPanel";
 import { QualitySelector, type VideoFormat } from "@/components/QualitySelector";
-import { analyzeVideo, type AnalyzeResult } from "@/lib/api";
+import { analyzeVideo, getFileDownloadUrl, type AnalyzeResult } from "@/lib/api";
 import { WebSocketClient, type DownloadStatus } from "@/lib/socket";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
@@ -39,13 +39,19 @@ export default function ToolPage() {
                 setLastError(data.error);
             }
             if (data.status === "completed" && data.file_token) {
-                const downloadUrl = `/api/file/serve/${data.file_token}`;
-                const link = document.createElement("a");
-                link.href = downloadUrl;
-                link.setAttribute("download", data.filename || "download");
-                document.body.appendChild(link);
-                link.click();
-                link.remove();
+                getFileDownloadUrl(data.file_token)
+                    .then((downloadUrl) => {
+                        const link = document.createElement("a");
+                        link.href = downloadUrl;
+                        link.setAttribute("download", data.filename || "download");
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                    })
+                    .catch(() => {
+                        setLastErrorStage("download");
+                        setLastError("Failed to build download URL");
+                    });
             }
         });
         wsRef.current.connect();
@@ -213,10 +219,22 @@ export default function ToolPage() {
 
                                         <Button
                                             onClick={onDownload}
-                                            disabled={!selectedFormatId || status.status === "downloading" || status.status === "finishing" || status.status === "initializing"}
+                                            disabled={
+                                                (downloadMode === "video" && availableFormats.length > 0 && !selectedFormatId)
+                                                || (downloadMode === "audio" && audioFormats.length > 0 && !selectedFormatId)
+                                                || status.status === "downloading"
+                                                || status.status === "finishing"
+                                                || status.status === "initializing"
+                                            }
                                             className="w-full h-12 text-sm font-semibold"
                                         >
-                                            {!selectedFormatId ? "Select a format" : "Download"}
+                                            {!selectedFormatId && (
+                                                (downloadMode === "video" && availableFormats.length > 0)
+                                                || (downloadMode === "audio" && audioFormats.length > 0)
+                                            )
+                                                ? "Select a format"
+                                                : "Download Best"
+                                            }
                                         </Button>
 
                                         {(status.status === "downloading" || status.status === "finishing" || status.status === "initializing") && (
