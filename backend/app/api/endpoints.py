@@ -223,6 +223,20 @@ async def ai_diagnose(req: DiagnoseRequest):
     admin_log.add("ai_diagnose_result", {"stage": req.stage, "root_cause": result.get("root_cause"), "confidence": result.get("confidence")})
     return result
 
+
+@router.get("/ai/diagnose")
+async def ai_diagnose_get(
+    stage: str = "other",
+    url: str = "",
+    error: str = "",
+):
+    """
+    GET fallback for environments where POST is blocked/misrouted.
+    Note: URL + error are truncated server-side by validation in DiagnoseRequest.
+    """
+    req = DiagnoseRequest(stage=stage, url=url, error=error, context={})
+    return await ai_diagnose(req)
+
 @router.get("/file/serve/{file_token}")
 async def serve_file(file_token: str):
     try:

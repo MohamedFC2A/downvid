@@ -141,6 +141,33 @@ class YtDlpService:
         ]
         return any(n in m for n in needles)
 
+    def _common_ydl_opts(self) -> dict:
+        proxy = (os.getenv("YTDLP_PROXY") or "").strip()
+        impersonate = (os.getenv("YTDLP_IMPERSONATE") or "").strip()
+        opts: dict = {
+            "nocheckcertificate": True,
+            "extractor_retries": 3,
+            "retries": 5,
+            "fragment_retries": 5,
+            "socket_timeout": 60,
+            "sleep_interval": 1,
+            "max_sleep_interval": 5,
+            "geo_bypass": True,
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "http_headers": {
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            # YouTube reliability: try multiple clients
+            "extractor_args": {"youtube": {"player_client": ["android", "web", "ios"]}},
+        }
+        if proxy:
+            opts["proxy"] = proxy
+        if impersonate:
+            # yt-dlp supports `--impersonate` (needs curl-impersonate in some setups)
+            opts["impersonate"] = impersonate
+        return opts
+
     async def get_video_info(self, url: str):
         loop = asyncio.get_running_loop()
         # Cookies can be required for some YouTube flows (consent/age/region).
@@ -152,25 +179,11 @@ class YtDlpService:
             cookies_path = Path("cookies.txt")
 
         ydl_opts = {
-            'quiet': True, 
-            'noplaylist': True,
-            'nocheckcertificate': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            'extractor_retries': 3,
-            # YouTube reliability: try multiple clients
-            'extractor_args': {'youtube': {'player_client': ['android', 'web', 'ios']}},
-            'verbose': True,
-            'http_headers': {
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-            },
-            'socket_timeout': 60,
-            'retries': 5,
-            'fragment_retries': 5,
-            'sleep_interval': 1,
-            'max_sleep_interval': 5,
-            'ignoreerrors': False,
+            "quiet": True,
+            "noplaylist": True,
+            "ignoreerrors": False,
+            "verbose": True,
+            **self._common_ydl_opts(),
         }
         
         tmp_cookie = None
@@ -317,20 +330,10 @@ class YtDlpService:
                 cookies_path = Path("cookies.txt")
 
             ydl_info_opts = {
-                "quiet": True, 
+                "quiet": True,
                 "noplaylist": True,
-                "nocheckcertificate": True,
-                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                "extractor_retries": 3,
-                "extractor_args": {"youtube": {"player_client": ["android", "web", "ios"]}},
                 "verbose": True,
-                "http_headers": {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
-                "socket_timeout": 60,
-                "retries": 5,
-                "fragment_retries": 5,
+                **self._common_ydl_opts(),
             }
             
             tmp_cookie = None
@@ -508,18 +511,8 @@ class YtDlpService:
                 "outtmpl": outtmpl,
                 "format": format_str,
                 "noplaylist": True,
-                "nocheckcertificate": True,
-                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                "extractor_retries": 3,
-                "extractor_args": {"youtube": {"player_client": ["android", "web", "ios"]}},
                 "verbose": True,
-                "http_headers": {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
-                "socket_timeout": 60,
-                "retries": 5,
-                "fragment_retries": 5,
+                **self._common_ydl_opts(),
                 **extra_opts,
                 **ffmpeg_opts,
             }
@@ -607,6 +600,19 @@ class YtDlpService:
             except Exception as e:
                 last_error = str(e)
                 admin_log.add("download_error", {"client_id": client_id, "label": label, "error": last_error})
+                if "HTTP Error 403" in last_error or "403" in last_error and "forbidden" in last_error.lower():
+                    await manager.send_personal_message(
+                        {
+                            "status": "error",
+                            "error": (
+                                "HTTP 403 (Forbidden) from the provider. "
+                                "This usually means the server IP is blocked/rate-limited. "
+                                "Fix: provide cookies (YTDLP_COOKIES_PATH/YTDLP_COOKIES_B64) and/or set a proxy (YTDLP_PROXY)."
+                            ),
+                        },
+                        client_id,
+                    )
+                    break
                 if self._looks_like_format_error(last_error):
                     await manager.send_personal_message(
                         {

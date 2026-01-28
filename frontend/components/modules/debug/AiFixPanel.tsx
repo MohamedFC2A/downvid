@@ -32,7 +32,7 @@ export function AiFixPanel({
         setReqError(null);
         setResult(null);
         try {
-            const res = await fetch("/api/ai/diagnose", {
+            let res = await fetch("/api/ai/diagnose", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -44,6 +44,15 @@ export function AiFixPanel({
                     },
                 }),
             });
+            if (res.status === 405) {
+                const qs = new URLSearchParams({
+                    stage,
+                    url,
+                    error,
+                });
+                res = await fetch(`/api/ai/diagnose?${qs.toString()}`, { method: "GET" });
+            }
+
             const json = await res.json().catch(() => null);
             if (!res.ok) {
                 throw new Error(json?.detail || `AI diagnose failed (${res.status})`);
@@ -124,4 +133,3 @@ export function AiFixPanel({
         </Card>
     );
 }
-
