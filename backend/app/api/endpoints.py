@@ -9,6 +9,8 @@ from app.core.config import settings
 from app.core.admin_log import admin_log
 from app.services.ytdlp_service import YtDlpService, VideoFormat
 from app.services.deepseek_service import deepseek_service
+import yt_dlp
+import shutil
 
 router = APIRouter()
 ytdlp_service = YtDlpService()
@@ -42,6 +44,39 @@ class AnalyzeResponse(BaseModel):
     analysis: dict
     available_formats: List[VideoFormat]
     audio_formats: List[VideoFormat]
+
+
+class DiagnoseRequest(BaseModel):
+    stage: str
+    url: str
+    error: str
+    context: dict = {}
+
+    @field_validator("stage")
+    @classmethod
+    def _validate_stage(cls, v: str) -> str:
+        v = (v or "").strip().lower()
+        if v not in {"analyze", "download", "ws", "other"}:
+            return "other"
+        return v
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url2(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            return ""
+        if len(v) > 2048:
+            return v[:2048]
+        return v
+
+    @field_validator("error")
+    @classmethod
+    def _validate_error(cls, v: str) -> str:
+        v = (v or "").strip()
+        if len(v) > 5000:
+            return v[:5000]
+        return v
 
 @router.websocket("/download/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
@@ -140,6 +175,38 @@ async def get_admin_logs(
     # clamp to avoid huge payloads
     limit = max(1, min(500, int(limit)))
     return {"items": admin_log.list(limit=limit)}
+
+
+@router.get("/diagnostics")
+async def diagnostics():
+    """Lightweight runtime diagnostics (no secrets)."""
+    ytdlp_version = getattr(getattr(yt_dlp, "version", None), "__version__", None)
+    return {
+        "yt_dlp_version": ytdlp_version,
+        "has_deno": shutil.which("deno") is not None,
+        "has_ffmpeg": shutil.which("ffmpeg") is not None,
+    }
+
+
+@router.post("/ai/diagnose")
+async def ai_diagnose(req: DiagnoseRequest):
+    # Attach a small amount of recent admin logs for context (sanitized)
+    recent = admin_log.list(limit=30)
+    ytdlp_version = getattr(getattr(yt_dlp, "version", None), "__version__", None)
+    context = {
+        "runtime": {
+            "yt_dlp_version": ytdlp_version,
+            "has_deno": shutil.which("deno") is not None,
+            "has_ffmpeg": shutil.which("ffmpeg") is not None,
+        },
+        "recent_events": recent,
+        "client_context": req.context or {},
+    }
+
+    admin_log.add("ai_diagnose_request", {"stage": req.stage, "url": req.url, "error": req.error[:300]})
+    result = await deepseek_service.diagnose_error(stage=req.stage, url=req.url, error=req.error, context=context)
+    admin_log.add("ai_diagnose_result", {"stage": req.stage, "root_cause": result.get("root_cause"), "confidence": result.get("confidence")})
+    return result
 
 @router.get("/file/serve/{file_token}")
 async def serve_file(file_token: str):

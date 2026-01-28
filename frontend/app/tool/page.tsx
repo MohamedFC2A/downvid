@@ -1,110 +1,43 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InsightsPanel } from "@/components/modules/ai/InsightsPanel";
-import type { VideoFormat } from "@/components/QualitySelector";
+import { QualitySelector, type VideoFormat } from "@/components/QualitySelector";
 import { analyzeVideo, type AnalyzeResult } from "@/lib/api";
-import { WebSocketClient, DownloadStatus } from "@/lib/socket";
+import { WebSocketClient, type DownloadStatus } from "@/lib/socket";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
-import { BulkUrlInput } from "@/components/modules/downloader/BulkUrlInput";
-import { DownloadCard, QueueItem } from "@/components/modules/downloader/DownloadCard";
-import { DownloadPrefs } from "@/components/modules/downloader/FormatPicker";
 import { AdminLogsPanel } from "@/components/modules/debug/AdminLogsPanel";
+import { AiFixPanel } from "@/components/modules/debug/AiFixPanel";
+import { Input } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
 
-const PREFS_KEY = "downvid:prefs:v1";
-
-function loadPrefs(): DownloadPrefs {
-    if (typeof window === "undefined") return { mode: "video", container: "mp4", height: 1080 };
-    try {
-        const raw = window.localStorage.getItem(PREFS_KEY);
-        if (!raw) return { mode: "video", container: "mp4", height: 1080 };
-        const j = JSON.parse(raw);
-        return {
-            mode: j.mode === "audio" ? "audio" : "video",
-            container: ["mp4", "webm", "mp3", "m4a"].includes(j.container) ? j.container : "mp4",
-            height: typeof j.height === "number" ? j.height : 1080,
-        };
-    } catch {
-        return { mode: "video", container: "mp4", height: 1080 };
-    }
-}
-
-function savePrefs(p: DownloadPrefs) {
-    try {
-        window.localStorage.setItem(PREFS_KEY, JSON.stringify(p));
-    } catch {
-        // ignore
-    }
-}
-
-function pickClosest(formats: VideoFormat[], prefs: DownloadPrefs): string | null {
-    if (!formats || formats.length === 0) return null;
-    const container = prefs.mode === "audio" && prefs.container === "mp3" ? "" : prefs.container;
-    const candidates = container ? formats.filter((f) => f.extension === container) : formats;
-    const list = candidates.length ? candidates : formats;
-
-    const withHeight = list
-        .map((f) => ({ f, h: f.height }))
-        .filter((x) => typeof x.h === "number" && x.h > 0);
-
-    if (prefs.mode === "video" && withHeight.length) {
-        withHeight.sort((a, b) => {
-            const da = Math.abs(prefs.height - (a.h || 0));
-            const db = Math.abs(prefs.height - (b.h || 0));
-            if (da !== db) return da - db;
-            return (b.h || 0) - (a.h || 0);
-        });
-        return withHeight[0].f.format_id;
-    }
-
-    return list[0].format_id;
-}
+const LAST_SELECTION_KEY = "downvid:lastSelection:v1";
 
 export default function ToolPage() {
-    const [prefs, setPrefs] = useState<DownloadPrefs>(() => loadPrefs());
-    const [queue, setQueue] = useState<QueueItem[]>([]);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
     const [showAdmin, setShowAdmin] = useState(false);
-    const [bulkRun, setBulkRun] = useState(false);
+    const [url, setUrl] = useState("");
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [analysisData, setAnalysisData] = useState<AnalyzeResult["analysis"] | null>(null);
+    const [videoInfo, setVideoInfo] = useState<{ title: string; thumbnail?: string; description?: string } | null>(null);
+    const [availableFormats, setAvailableFormats] = useState<VideoFormat[]>([]);
+    const [audioFormats, setAudioFormats] = useState<VideoFormat[]>([]);
+    const [selectedFormatId, setSelectedFormatId] = useState<string | null>(null);
+    const [downloadMode, setDownloadMode] = useState<"video" | "audio">("video");
+    const [status, setStatus] = useState<DownloadStatus>({ status: "idle", percent: 0 });
 
-    // per-item websocket clients
-    const wsMapRef = useRef<Map<string, WebSocketClient>>(new Map());
-    const queueRef = useRef<QueueItem[]>([]);
-    const idSeqRef = useRef(0);
-    const completionRef = useRef<Map<string, () => void>>(new Map());
+    const [lastErrorStage, setLastErrorStage] = useState<"analyze" | "download" | "ws" | "other">("other");
+    const [lastError, setLastError] = useState<string>("");
+
+    const clientId = useMemo(() => Math.random().toString(36).slice(2), []);
+    const wsRef = useRef<WebSocketClient | null>(null);
 
     useEffect(() => {
-        queueRef.current = queue;
-    }, [queue]);
-
-    const selected = useMemo(() => queue.find((q) => q.id === selectedId) || null, [queue, selectedId]);
-
-    function startDownload(id: string) {
-        const item = queueRef.current.find((q) => q.id === id);
-        if (!item || item.isAnalyzing) return;
-
-        // Close any existing socket for this item (restart scenario)
-        const old = wsMapRef.current.get(id);
-        old?.close();
-        wsMapRef.current.delete(id);
-
-        const clientId = `${id}-${Math.random().toString(36).slice(2)}`;
-        const ws = new WebSocketClient(clientId, (data: DownloadStatus) => {
-            setQueue((prev) =>
-                prev.map((q) => {
-                    if (q.id !== id) return q;
-                    return {
-                        ...q,
-                        status: data.status || q.status,
-                        percent: typeof data.percent === "number" ? data.percent : q.percent,
-                        speed: data.speed || q.speed,
-                        eta: data.eta || q.eta,
-                        error: data.error || q.error,
-                        isDownloading: data.status !== "completed" && data.status !== "error",
-                    };
-                })
-            );
-
+        wsRef.current = new WebSocketClient(clientId, (data) => {
+            setStatus((prev) => ({ ...prev, ...data }));
+            if (data.status === "error" && data.error) {
+                setLastErrorStage("download");
+                setLastError(data.error);
+            }
             if (data.status === "completed" && data.file_token) {
                 const downloadUrl = `/api/file/serve/${data.file_token}`;
                 const link = document.createElement("a");
@@ -114,206 +47,209 @@ export default function ToolPage() {
                 link.click();
                 link.remove();
             }
-
-            if (data.status === "completed" || data.status === "error") {
-                const done = completionRef.current.get(id);
-                if (done) {
-                    completionRef.current.delete(id);
-                    done();
-                }
-            }
         });
+        wsRef.current.connect();
+        return () => wsRef.current?.close();
+    }, [clientId]);
 
-        wsMapRef.current.set(id, ws);
-        ws.connect();
-
-        const chosenId =
-            item.prefs.mode === "video" ? pickClosest(item.availableFormats, item.prefs) : pickClosest(item.audioFormats, item.prefs);
-
-        setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, status: "initializing", percent: 0, isDownloading: true } : q)));
-
-        ws.sendDownloadSpec(item.url, {
-            mode: item.prefs.mode,
-            container: item.prefs.container,
-            height: item.prefs.mode === "video" ? item.prefs.height : undefined,
-            format_id: chosenId || undefined,
-        });
-    }
-
-    function waitForCompletion(id: string): Promise<void> {
-        const current = queueRef.current.find((q) => q.id === id);
-        if (!current) return Promise.resolve();
-        if (current.status === "completed" || current.status === "error") return Promise.resolve();
-        return new Promise((resolve) => {
-            completionRef.current.set(id, resolve);
-        });
-    }
-
-    async function downloadAll() {
-        setBulkRun(true);
+    useEffect(() => {
         try {
-            for (const item of queueRef.current) {
-                if (item.isAnalyzing) continue;
-                if (item.status === "completed") continue;
-                startDownload(item.id);
-                await waitForCompletion(item.id);
-            }
-        } finally {
-            setBulkRun(false);
+            const raw = window.localStorage.getItem(LAST_SELECTION_KEY);
+            if (!raw) return;
+            const j = JSON.parse(raw);
+            if (j.mode === "audio") setDownloadMode("audio");
+        } catch {
+            // ignore
+        }
+    }, []);
+
+    function persistSelection(mode: "video" | "audio", formatId: string) {
+        try {
+            window.localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify({ mode, formatId }));
+        } catch {
+            // ignore
         }
     }
 
-    const addUrls = async (urls: string[]) => {
-        const nextItems: QueueItem[] = urls.map((url, idx) => ({
-            id: `q${idSeqRef.current + 1 + idx}`,
-            url,
-            title: "",
-            thumbnail: "",
-            availableFormats: [],
-            audioFormats: [],
-            prefs,
-            status: "idle",
-            percent: 0,
-            isAnalyzing: true,
-            isDownloading: false,
-        }));
-        idSeqRef.current += nextItems.length;
-
-        setQueue((prev) => [...nextItems, ...prev]);
-        if (!selectedId && nextItems.length) setSelectedId(nextItems[0].id);
-
-        // analyze sequentially to avoid rate-limits
-        for (const it of nextItems) {
-            await analyzeItem(it.id, it.url);
-        }
-    };
-
-    const analyzeItem = async (id: string, urlOverride?: string) => {
-        setQueue((prev) =>
-            prev.map((q) => (q.id === id ? { ...q, isAnalyzing: true, status: "idle", percent: 0, error: undefined } : q))
-        );
-        const url = urlOverride || queueRef.current.find((q) => q.id === id)?.url;
-        if (!url) return;
+    async function onAnalyze() {
+        const u = url.trim();
+        if (!u) return;
+        setIsAnalyzing(true);
+        setStatus({ status: "idle", percent: 0 });
+        setAnalysisData(null);
+        setVideoInfo(null);
+        setAvailableFormats([]);
+        setAudioFormats([]);
+        setSelectedFormatId(null);
+        setLastError("");
 
         try {
-            const data: AnalyzeResult = await analyzeVideo(url);
-            const available = (data.available_formats || []) as VideoFormat[];
-            const audio = (data.audio_formats || []) as VideoFormat[];
-
-            setQueue((prev) =>
-                prev.map((q) =>
-                    q.id === id
-                        ? {
-                            ...q,
-                            title: data.title,
-                            thumbnail: data.thumbnail,
-                            description: data.description,
-                            analysisData: data.analysis,
-                            availableFormats: available,
-                            audioFormats: audio,
-                            isAnalyzing: false,
-                        }
-                        : q
-                )
-            );
+            const data = await analyzeVideo(u);
+            setVideoInfo({ title: data.title, thumbnail: data.thumbnail, description: data.description });
+            setAnalysisData(data.analysis);
+            setAvailableFormats(data.available_formats || []);
+            setAudioFormats(data.audio_formats || []);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "Analysis failed";
-            setQueue((prev) =>
-                prev.map((q) =>
-                    q.id === id
-                        ? { ...q, isAnalyzing: false, status: "error", percent: 0, error: msg }
-                        : q
-                )
-            );
+            setLastErrorStage("analyze");
+            setLastError(msg);
+            setStatus({ status: "error", percent: 0, error: msg });
+        } finally {
+            setIsAnalyzing(false);
         }
-    };
+    }
 
-    const updateItemPrefs = (id: string, next: DownloadPrefs) => {
-        setPrefs(next);
-        savePrefs(next);
-        setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, prefs: next } : q)));
-    };
-
-    const removeItem = (id: string) => {
-        const ws = wsMapRef.current.get(id);
-        ws?.close();
-        wsMapRef.current.delete(id);
-        setQueue((prev) => prev.filter((q) => q.id !== id));
-        if (selectedId === id) setSelectedId(null);
-    };
-
-    const clearQueue = () => {
-        for (const ws of wsMapRef.current.values()) {
-            try {
-                ws.close();
-            } catch {
-                // ignore
-            }
-        }
-        wsMapRef.current.clear();
-        setQueue([]);
-        setSelectedId(null);
-        setBulkRun(false);
-    };
+    function onDownload() {
+        const u = url.trim();
+        if (!u || !wsRef.current) return;
+        setLastError("");
+        setStatus({ status: "initializing", percent: 0, speed: "", eta: "" });
+        wsRef.current.sendDownloadSpec(u, {
+            mode: downloadMode,
+            format_id: selectedFormatId || undefined,
+        });
+    }
 
     return (
-        <main className="min-h-screen pt-32 pb-12 px-4 flex flex-col items-center relative z-10">
-            <div className="w-full max-w-6xl space-y-12">
+        <main className="min-h-screen pt-28 pb-14 px-4 flex flex-col items-center relative z-10">
+            {/* Liquid glass backdrop */}
+            <div className="pointer-events-none fixed inset-0 -z-10">
+                <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full liquid-orb opacity-40" />
+                <div className="absolute bottom-[-220px] right-[-180px] w-[700px] h-[700px] rounded-full liquid-orb opacity-30" />
+            </div>
+
+            <div className="w-full max-w-6xl space-y-10">
                 <div className="text-center space-y-4 flex flex-col items-center">
-                    <div className="mb-4">
+                    <div className="mb-2">
                         <Logo />
                     </div>
-                    <p className="text-zinc-500 text-lg tracking-wide uppercase font-mono">
-                        Professional extraction pipeline
+                    <p className="text-zinc-400 text-sm tracking-[0.3em] uppercase font-mono">
+                        Liquid Glass Downloader
                     </p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <Button
-                        variant="secondary"
-                        className="h-11 px-5 text-sm"
-                        onClick={() => setShowAdmin((v) => !v)}
-                    >
-                        {showAdmin ? "Hide" : "Show"} Debug
-                    </Button>
-                    <Button
-                        className="h-11 px-6 text-sm font-semibold"
-                        onClick={downloadAll}
-                        disabled={queue.length === 0 || queue.some((q) => q.isAnalyzing)}
-                    >
-                        {bulkRun ? "Running..." : "Download All"}
-                    </Button>
-                    <Button variant="secondary" className="h-11 px-6 text-sm" onClick={clearQueue} disabled={queue.length === 0}>
-                        Clear Queue
-                    </Button>
-                </div>
+                <Card className="glass-panel rounded-2xl" spotlight={false}>
+                    <div className="p-5 sm:p-6 space-y-4">
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <div
+                                className="flex-1"
+                                onDragOver={(e) => {
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = "copy";
+                                }}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    const text = e.dataTransfer.getData("text");
+                                    if (text) setUrl(text.trim());
+                                }}
+                            >
+                                <Input
+                                    value={url}
+                                    onChange={(e) => setUrl(e.target.value)}
+                                    placeholder="Paste a YouTube / TikTok / Instagram URL…"
+                                    className="h-12 text-base bg-black/20 border-white/10 focus-visible:ring-white/20"
+                                />
+                            </div>
+                            <Button className="h-12 px-6 text-sm font-semibold" onClick={onAnalyze} disabled={isAnalyzing || !url.trim()}>
+                                {isAnalyzing ? "Analyzing..." : "Analyze"}
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                className="h-12 px-6 text-sm"
+                                onClick={() => setShowAdmin((v) => !v)}
+                            >
+                                {showAdmin ? "Hide" : "Show"} Logs
+                            </Button>
+                        </div>
 
-                <BulkUrlInput onAddUrls={addUrls} />
+                        {status.status === "error" && (
+                            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                                {status.error || "Error"}
+                            </div>
+                        )}
+                    </div>
+                </Card>
 
-                {queue.length > 0 && (
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start fade-in-up">
-                        <div className="lg:col-span-7 space-y-4">
-                            {queue.map((item) => (
-                                <div key={item.id} onClick={() => setSelectedId(item.id)} className="cursor-pointer">
-                                    <DownloadCard
-                                        item={item}
-                                        onChangePrefs={updateItemPrefs}
-                                        onAnalyze={analyzeItem}
-                                        onStart={startDownload}
-                                        onRemove={removeItem}
-                                    />
-                                </div>
-                            ))}
+                {(videoInfo || isAnalyzing) && (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                        <div className="lg:col-span-7 space-y-6">
+                            {videoInfo && (
+                                <Card className="glass-panel rounded-2xl overflow-hidden" spotlight={false}>
+                                    <div className="aspect-video relative bg-black/30">
+                                        {videoInfo.thumbnail ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img src={videoInfo.thumbnail} alt={videoInfo.title} className="object-cover w-full h-full opacity-95" />
+                                        ) : (
+                                            <div className="flex items-center justify-center h-full text-zinc-600 font-mono text-xs">No Preview</div>
+                                        )}
+                                    </div>
+                                    <div className="p-4 border-t border-white/10">
+                                        <h3 className="text-zinc-100 font-semibold tracking-tight line-clamp-2">{videoInfo.title}</h3>
+                                        {videoInfo.description && (
+                                            <p className="text-zinc-500 text-xs mt-2 line-clamp-3">{videoInfo.description}</p>
+                                        )}
+                                    </div>
+                                </Card>
+                            )}
+
+                            {!isAnalyzing && videoInfo && (
+                                <Card className="glass-panel rounded-2xl" spotlight={false}>
+                                    <div className="p-5 space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-sm font-semibold">Quality</div>
+                                            <div className="text-[11px] text-zinc-500 font-mono">
+                                                WebSocket: {wsRef.current?.isConnected ? "connected" : "reconnecting…"}
+                                            </div>
+                                        </div>
+                                        <QualitySelector
+                                            availableFormats={availableFormats}
+                                            audioFormats={audioFormats}
+                                            onSelect={(id, mode) => {
+                                                setSelectedFormatId(id);
+                                                setDownloadMode(mode);
+                                                persistSelection(mode, id);
+                                            }}
+                                        />
+
+                                        <Button
+                                            onClick={onDownload}
+                                            disabled={!selectedFormatId || status.status === "downloading" || status.status === "finishing" || status.status === "initializing"}
+                                            className="w-full h-12 text-sm font-semibold"
+                                        >
+                                            {!selectedFormatId ? "Select a format" : "Download"}
+                                        </Button>
+
+                                        {(status.status === "downloading" || status.status === "finishing" || status.status === "initializing") && (
+                                            <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                                                <div className="flex justify-between text-zinc-400 text-xs font-mono">
+                                                    <span className="uppercase tracking-wider">{status.status}</span>
+                                                    <span className="text-zinc-500">
+                                                        {[status.speed, status.eta].filter(Boolean).join(" • ")}
+                                                    </span>
+                                                </div>
+                                                <div className="mt-3 h-1.5 w-full bg-white/10 rounded-full overflow-hidden border border-white/10">
+                                                    <div
+                                                        className="h-full bg-white/90 shadow-[0_0_18px_rgba(255,255,255,0.35)]"
+                                                        style={{ width: `${Math.max(0, Math.min(100, status.percent || 0))}%` }}
+                                                    />
+                                                </div>
+                                                <div className="text-right text-zinc-500 font-mono text-xs pt-2">
+                                                    {(status.percent || 0).toFixed(1)}%
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </Card>
+                            )}
+
+                            {lastError && (
+                                <AiFixPanel stage={lastErrorStage} url={url.trim()} error={lastError} />
+                            )}
                         </div>
 
                         <div className="lg:col-span-5 space-y-6">
                             <AdminLogsPanel enabled={showAdmin} />
-                            <InsightsPanel data={selected?.analysisData || null} isLoading={false} />
-                            {!selected && (
-                                <div className="text-zinc-600 text-sm font-mono text-center border border-zinc-800 rounded-xl p-6 bg-zinc-950/30">
-                                    Select an item to see details
-                                </div>
-                            )}
+                            <InsightsPanel data={analysisData} isLoading={isAnalyzing} />
                         </div>
                     </div>
                 )}
@@ -321,5 +257,3 @@ export default function ToolPage() {
         </main>
     );
 }
-
-// Simple generic animation class injection if needed, or rely on global CSS

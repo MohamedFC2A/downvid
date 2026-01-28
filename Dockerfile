@@ -46,8 +46,19 @@ FROM python:3.11-slim AS production
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
+    unzip \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+# yt-dlp (as of late 2025+) requires an external JS runtime for YouTube.
+# Install Deno (lightweight and recommended by yt-dlp) for reliable extraction.
+ARG DENO_VERSION=2.6.4
+RUN curl -fsSL -o /tmp/deno.zip \
+      https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip \
+    && unzip -q /tmp/deno.zip -d /usr/local/bin \
+    && rm -f /tmp/deno.zip \
+    && deno --version
 
 WORKDIR /app
 

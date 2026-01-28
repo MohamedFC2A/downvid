@@ -4,6 +4,7 @@ import re
 import os
 import uuid
 import logging
+import tempfile
 from pathlib import Path
 from typing import Any, Iterable, List, Optional
 from pydantic import BaseModel
@@ -137,8 +138,11 @@ class YtDlpService:
 
     async def get_video_info(self, url: str):
         loop = asyncio.get_running_loop()
-        # Try to find a cookies file
-        cookies_path = Path("backend/cookies.txt")
+        # Cookies can be required for some YouTube flows (consent/age/region).
+        # Prefer env-provided cookies, fall back to local cookies.txt for dev.
+        env_cookie_path = (os.getenv("YTDLP_COOKIES_PATH") or "").strip()
+        env_cookie_b64 = (os.getenv("YTDLP_COOKIES_B64") or "").strip()
+        cookies_path = Path(env_cookie_path) if env_cookie_path else Path("backend/cookies.txt")
         if not cookies_path.exists():
             cookies_path = Path("cookies.txt")
 
@@ -147,8 +151,10 @@ class YtDlpService:
             'noplaylist': True,
             'nocheckcertificate': True,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            # Options to bypass YouTube restrictions - use android which works better currently
-            'extractor_args': {'youtube': {'player_client': ['android']}},
+            'extractor_retries': 3,
+            # YouTube reliability: try multiple clients
+            'extractor_args': {'youtube': {'player_client': ['android', 'web', 'ios']}},
+            'verbose': True,
             'http_headers': {
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
@@ -162,14 +168,32 @@ class YtDlpService:
             'ignoreerrors': False,
         }
         
+        tmp_cookie = None
         if cookies_path.exists():
-             ydl_opts['cookiefile'] = str(cookies_path)
-             
+            ydl_opts['cookiefile'] = str(cookies_path)
+        elif env_cookie_b64:
+            try:
+                import base64
+
+                tmp_cookie = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+                tmp_cookie.write(base64.b64decode(env_cookie_b64))
+                tmp_cookie.flush()
+                ydl_opts["cookiefile"] = tmp_cookie.name
+            except Exception:
+                tmp_cookie = None
+              
         def fetch_info():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(url, download=False)
 
-        info = await loop.run_in_executor(None, fetch_info)
+        try:
+            info = await loop.run_in_executor(None, fetch_info)
+        finally:
+            if tmp_cookie:
+                try:
+                    os.unlink(tmp_cookie.name)
+                except Exception:
+                    pass
         
         formats = list(self._iter_formats(info))
         available_formats = []
@@ -275,7 +299,9 @@ class YtDlpService:
         formats_for_choice: list[dict] = []
         try:
             # Try to find a cookies file
-            cookies_path = Path("backend/cookies.txt")
+            env_cookie_path = (os.getenv("YTDLP_COOKIES_PATH") or "").strip()
+            env_cookie_b64 = (os.getenv("YTDLP_COOKIES_B64") or "").strip()
+            cookies_path = Path(env_cookie_path) if env_cookie_path else Path("backend/cookies.txt")
             if not cookies_path.exists():
                 cookies_path = Path("cookies.txt")
 
@@ -284,8 +310,9 @@ class YtDlpService:
                 "noplaylist": True,
                 "nocheckcertificate": True,
                 "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                # Options to bypass YouTube restrictions - use android which works better currently
-                "extractor_args": {"youtube": {"player_client": ["android"]}},
+                "extractor_retries": 3,
+                "extractor_args": {"youtube": {"player_client": ["android", "web", "ios"]}},
+                "verbose": True,
                 "http_headers": {
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language": "en-US,en;q=0.9",
@@ -295,14 +322,32 @@ class YtDlpService:
                 "fragment_retries": 5,
             }
             
+            tmp_cookie = None
             if cookies_path.exists():
-                 ydl_info_opts['cookiefile'] = str(cookies_path)
+                ydl_info_opts['cookiefile'] = str(cookies_path)
+            elif env_cookie_b64:
+                try:
+                    import base64
+
+                    tmp_cookie = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+                    tmp_cookie.write(base64.b64decode(env_cookie_b64))
+                    tmp_cookie.flush()
+                    ydl_info_opts["cookiefile"] = tmp_cookie.name
+                except Exception:
+                    tmp_cookie = None
 
             def _extract():
                 with yt_dlp.YoutubeDL(ydl_info_opts) as ydl:
                     return ydl.extract_info(url, download=False)
 
-            info_for_choice = await loop.run_in_executor(None, _extract)
+            try:
+                info_for_choice = await loop.run_in_executor(None, _extract)
+            finally:
+                if tmp_cookie:
+                    try:
+                        os.unlink(tmp_cookie.name)
+                    except Exception:
+                        pass
             formats_for_choice = list(self._iter_formats(info_for_choice))
             admin_log.add(
                 "formats",
@@ -434,7 +479,9 @@ class YtDlpService:
         async def do_download(format_str: str, extra_opts: dict) -> tuple[str, str]:
             """Execute download with given options, return (token, filepath)."""
             # Try to find a cookies file
-            cookies_path = Path("backend/cookies.txt")
+            env_cookie_path = (os.getenv("YTDLP_COOKIES_PATH") or "").strip()
+            env_cookie_b64 = (os.getenv("YTDLP_COOKIES_B64") or "").strip()
+            cookies_path = Path(env_cookie_path) if env_cookie_path else Path("backend/cookies.txt")
             if not cookies_path.exists():
                 cookies_path = Path("cookies.txt")
 
@@ -445,8 +492,9 @@ class YtDlpService:
                 "noplaylist": True,
                 "nocheckcertificate": True,
                 "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                # Options to bypass YouTube restrictions - use android which works better currently
-                "extractor_args": {"youtube": {"player_client": ["android"]}},
+                "extractor_retries": 3,
+                "extractor_args": {"youtube": {"player_client": ["android", "web", "ios"]}},
+                "verbose": True,
                 "http_headers": {
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language": "en-US,en;q=0.9",
@@ -458,11 +506,29 @@ class YtDlpService:
                 **ffmpeg_opts,
             }
             
+            tmp_cookie = None
             if cookies_path.exists():
-                 opts['cookiefile'] = str(cookies_path)
+                opts['cookiefile'] = str(cookies_path)
+            elif env_cookie_b64:
+                try:
+                    import base64
+
+                    tmp_cookie = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+                    tmp_cookie.write(base64.b64decode(env_cookie_b64))
+                    tmp_cookie.flush()
+                    opts["cookiefile"] = tmp_cookie.name
+                except Exception:
+                    tmp_cookie = None
 
             with yt_dlp.YoutubeDL(opts) as ydl:
-                info = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=True))
+                try:
+                    info = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=True))
+                finally:
+                    if tmp_cookie:
+                        try:
+                            os.unlink(tmp_cookie.name)
+                        except Exception:
+                            pass
 
                 if "requested_downloads" in info and info["requested_downloads"]:
                     filepath = info["requested_downloads"][0]["filepath"]

@@ -1,5 +1,4 @@
 import type { VideoFormat } from "@/components/QualitySelector";
-import type { InsightsData } from "@/components/modules/downloader/DownloadCard";
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api` : "/api";
 
@@ -7,7 +6,11 @@ export type AnalyzeResult = {
     title: string;
     thumbnail?: string;
     description?: string;
-    analysis: InsightsData;
+    analysis: {
+        summary: string[];
+        sentiment: string;
+        hashtags: string[];
+    };
     available_formats: VideoFormat[];
     audio_formats: VideoFormat[];
 };
