@@ -29,7 +29,8 @@ export function AdminLogsPanel({ enabled }: { enabled: boolean }) {
         setIsLoading(true);
         setError(null);
         try {
-            const res = await fetch(`/api/admin/logs?limit=120`, { cache: "no-store" });
+            const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+            const res = await fetch(`${baseUrl}/api/admin/logs?limit=120`, { cache: "no-store" });
             if (!res.ok) {
                 const j = await res.json().catch(() => null);
                 throw new Error(j?.detail || `Failed to load logs (${res.status})`);
