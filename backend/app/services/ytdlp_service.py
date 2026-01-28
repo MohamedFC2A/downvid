@@ -147,24 +147,19 @@ class YtDlpService:
             'noplaylist': True,
             'nocheckcertificate': True,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            # Options to bypass 403 Forbidden - try multiple player clients
-            'extractor_args': {'youtube': {'player_client': ['web', 'ios', 'android'], 'skip': ['dash', 'hls']}},
+            # Options to bypass YouTube restrictions - use tv_embedded which works better on cloud
+            'extractor_args': {'youtube': {'player_client': ['tv_embedded', 'web']}},
             'http_headers': {
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Accept-Encoding': 'gzip, deflate, br',
-                'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-                'Sec-Ch-Ua-Mobile': '?0',
-                'Sec-Ch-Ua-Platform': '"Windows"',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'Upgrade-Insecure-Requests': '1',
             },
-            'socket_timeout': 30,
-            'retries': 10,
-            'fragment_retries': 10,
+            'socket_timeout': 60,
+            'retries': 5,
+            'fragment_retries': 5,
+            'sleep_interval': 1,
+            'max_sleep_interval': 5,
+            'ignoreerrors': False,
         }
         
         if cookies_path.exists():
@@ -289,24 +284,15 @@ class YtDlpService:
                 "noplaylist": True,
                 "nocheckcertificate": True,
                 "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                # Options to bypass 403 Forbidden - try multiple player clients
-                "extractor_args": {"youtube": {"player_client": ["web", "ios", "android"], "skip": ["dash", "hls"]}},
+                # Options to bypass YouTube restrictions - use tv_embedded which works better on cloud
+                "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web"]}},
                 "http_headers": {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language": "en-US,en;q=0.9",
-                    "Accept-Encoding": "gzip, deflate, br",
-                    "Sec-Ch-Ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-                    "Sec-Ch-Ua-Mobile": "?0",
-                    "Sec-Ch-Ua-Platform": '"Windows"',
-                    "Sec-Fetch-Dest": "document",
-                    "Sec-Fetch-Mode": "navigate",
-                    "Sec-Fetch-Site": "none",
-                    "Sec-Fetch-User": "?1",
-                    "Upgrade-Insecure-Requests": "1",
                 },
-                "socket_timeout": 30,
-                "retries": 10,
-                "fragment_retries": 10,
+                "socket_timeout": 60,
+                "retries": 5,
+                "fragment_retries": 5,
             }
             
             if cookies_path.exists():
@@ -459,24 +445,15 @@ class YtDlpService:
                 "noplaylist": True,
                 "nocheckcertificate": True,
                 "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                # Options to bypass 403 Forbidden - try multiple player clients
-                "extractor_args": {"youtube": {"player_client": ["web", "ios", "android"], "skip": ["dash", "hls"]}},
+                # Options to bypass YouTube restrictions - use tv_embedded which works better on cloud
+                "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web"]}},
                 "http_headers": {
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language": "en-US,en;q=0.9",
-                    "Accept-Encoding": "gzip, deflate, br",
-                    "Sec-Ch-Ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-                    "Sec-Ch-Ua-Mobile": "?0",
-                    "Sec-Ch-Ua-Platform": '"Windows"',
-                    "Sec-Fetch-Dest": "document",
-                    "Sec-Fetch-Mode": "navigate",
-                    "Sec-Fetch-Site": "none",
-                    "Sec-Fetch-User": "?1",
-                    "Upgrade-Insecure-Requests": "1",
                 },
-                "socket_timeout": 30,
-                "retries": 10,
-                "fragment_retries": 10,
+                "socket_timeout": 60,
+                "retries": 5,
+                "fragment_retries": 5,
                 **extra_opts,
                 **ffmpeg_opts,
             }
