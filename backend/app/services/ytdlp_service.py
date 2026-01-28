@@ -272,7 +272,7 @@ class YtDlpService:
                 if sig in seen:
                     continue
                 
-                valid_ext = ext in ['mp4', 'webm']
+                valid_ext = ext in ['mp4', 'webm', 'mkv', 'mov']
                 if not valid_ext: continue
                 
                 filesize = f.get('filesize') or f.get('filesize_approx')
@@ -295,33 +295,51 @@ class YtDlpService:
 
         # Process Audio Formats
         for f in formats:
-             if self._is_audio_only(f):
+            if self._is_audio_only(f):
+                ext = f.get('ext')
+                if not ext:
+                    continue
                 filesize = f.get('filesize') or f.get('filesize_approx')
                 audio_formats.append(VideoFormat(
                     format_id=f['format_id'],
                     resolution="Audio",
-                    extension=f['ext'],
+                    extension=ext,
                     filesize_str=self._format_filesize(filesize),
                     note=f.get('format_note', 'Audio Only'),
                     abr=f.get("abr"),
                     vcodec=f.get("vcodec"),
                     acodec=f.get("acodec"),
                 ))
-                # Just take top 3 distinct audios? usually just want one good one.
-                # Let's just return unique extensions/qualities? 
-                # For now let's just grab the best audio (m4a/mp3)
-        
-        # Deduplicate audio by extension/quality if needed, but let's just limit to a few best ones
-        # Actually for audio mode, usually 'bestaudio' is fine, but if user wants to select... 
-        # let's filters for unique 'ext' + 'abr' (bitrate).
-        
-        # Simplified Audio: Just return distinct extensions with best bitrate
-        unique_audio = {}
-        for af in audio_formats:
-            if af.extension not in unique_audio:
-                unique_audio[af.extension] = af
-        
-        final_audio_formats = list(unique_audio.values())
+
+        # Prefer higher bitrate audio options; keep a small list for UI.
+        audio_formats_sorted = sorted(audio_formats, key=lambda x: (x.abr or 0, x.filesize_str), reverse=True)
+        final_audio_formats = audio_formats_sorted[:6]
+
+        # Fallback: if no video formats matched filters, include a few raw video formats
+        if not available_formats and formats:
+            raw_video = []
+            for f in formats_sorted:
+                if not (self._is_video_only(f) or self._is_muxed_av(f)):
+                    continue
+                fmt_id = f.get("format_id")
+                ext = f.get("ext") or "unknown"
+                height = f.get("height")
+                res_str = f"{height}p" if height else (f.get("format_note") or "Video")
+                filesize = f.get('filesize') or f.get('filesize_approx')
+                raw_video.append(VideoFormat(
+                    format_id=str(fmt_id),
+                    resolution=res_str,
+                    extension=ext,
+                    filesize_str=self._format_filesize(filesize),
+                    note=f.get('format_note', '') or '',
+                    height=height,
+                    fps=f.get("fps"),
+                    vcodec=f.get("vcodec"),
+                    acodec=f.get("acodec"),
+                ))
+                if len(raw_video) >= 8:
+                    break
+            available_formats = raw_video
 
         # Also return raw info for title etc
         return {
