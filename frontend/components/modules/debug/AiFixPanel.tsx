@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api` : "/api";
+
 type DiagnoseResult = {
     root_cause?: string;
     confidence?: number;
@@ -32,7 +34,7 @@ export function AiFixPanel({
         setReqError(null);
         setResult(null);
         try {
-            let res = await fetch("/api/ai/diagnose", {
+            let res = await fetch(`${API_BASE}/ai/diagnose`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -50,7 +52,7 @@ export function AiFixPanel({
                     url,
                     error,
                 });
-                res = await fetch(`/api/ai/diagnose?${qs.toString()}`, { method: "GET" });
+                res = await fetch(`${API_BASE}/ai/diagnose?${qs.toString()}`, { method: "GET" });
             }
 
             const json = await res.json().catch(() => null);
