@@ -162,7 +162,20 @@ async def analyze_video(request: AnalyzeRequest):
             "audio_formats": info.get("audio_formats", [])
         }
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        msg = str(e)
+        admin_log.add("analyze_error", {"url": request.url, "error": msg})
+        # Provide actionable hints for the most common YouTube extractor failure
+        if "Failed to extract any player response" in msg or "player response" in msg.lower():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "YouTube extraction failed (no player response). "
+                    "Fix: ensure yt-dlp is updated, a JS runtime is available (Deno), "
+                    "and provide cookies if needed (YTDLP_COOKIES_PATH or YTDLP_COOKIES_B64). "
+                    "Check /api/diagnostics for runtime status."
+                ),
+            )
+        raise HTTPException(status_code=400, detail=msg)
 
 
 @router.get("/admin/logs")
@@ -190,6 +203,8 @@ async def diagnostics():
 
 @router.post("/ai/diagnose")
 async def ai_diagnose(req: DiagnoseRequest):
+    if not settings.DEEPSEEK_API_KEY:
+        raise HTTPException(status_code=503, detail="DEEPSEEK_API_KEY is not configured on the server")
     # Attach a small amount of recent admin logs for context (sanitized)
     recent = admin_log.list(limit=30)
     ytdlp_version = getattr(getattr(yt_dlp, "version", None), "__version__", None)

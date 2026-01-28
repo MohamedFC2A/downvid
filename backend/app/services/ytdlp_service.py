@@ -59,6 +59,9 @@ class YtDlpService:
     def _is_video_only(self, f: dict) -> bool:
         return f.get("vcodec") not in (None, "none") and f.get("acodec") in (None, "none")
 
+    def _is_muxed_av(self, f: dict) -> bool:
+        return f.get("vcodec") not in (None, "none") and f.get("acodec") not in (None, "none")
+
     def _is_audio_only(self, f: dict) -> bool:
         return f.get("vcodec") in (None, "none") and f.get("acodec") not in (None, "none")
 
@@ -74,7 +77,9 @@ class YtDlpService:
         target_height: int,
         container: Optional[str],
     ) -> Optional[str]:
-        candidates = [f for f in formats if self._is_video_only(f) and (f.get("height") or 0) > 0]
+        video_only = [f for f in formats if self._is_video_only(f) and (f.get("height") or 0) > 0]
+        muxed = [f for f in formats if self._is_muxed_av(f) and (f.get("height") or 0) > 0]
+        candidates = video_only or muxed
         if container:
             candidates = [f for f in candidates if f.get("ext") == container]
         if not candidates:
@@ -199,13 +204,15 @@ class YtDlpService:
         available_formats = []
         audio_formats = []
         
-        # Process Video Formats (video-only streams preferred for best quality)
-        # Show unique combos per (height, ext) to make selection clearer.
+        # Process Video Formats
+        # We prefer video-only (best quality) but we MUST also include muxed formats
+        # because some videos only expose progressive/mp4 (v+a) streams.
+        # Show unique combos per (height, ext, kind) to make selection clearer.
         seen = set()
         formats_sorted = sorted(formats, key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
         
         for f in formats_sorted:
-            if self._is_video_only(f):
+            if self._is_video_only(f) or self._is_muxed_av(f):
                 height = f.get('height')
                 if not height: continue
                 
@@ -213,7 +220,8 @@ class YtDlpService:
                 ext = f.get('ext')
                 if not ext: 
                     continue
-                sig = (int(height), ext)
+                kind = "muxed" if self._is_muxed_av(f) else "video"
+                sig = (int(height), ext, kind)
                 if sig in seen:
                     continue
                 
@@ -221,13 +229,16 @@ class YtDlpService:
                 if not valid_ext: continue
                 
                 filesize = f.get('filesize') or f.get('filesize_approx')
+                note = f.get('format_note', '') or ''
+                if kind == "muxed" and "mux" not in note.lower():
+                    note = (note + " • Muxed").strip(" •")
                 
                 available_formats.append(VideoFormat(
                     format_id=f['format_id'],
                     resolution=res_str,
                     extension=ext,
                     filesize_str=self._format_filesize(filesize),
-                    note=f.get('format_note', ''),
+                    note=note,
                     height=int(height),
                     fps=f.get("fps"),
                     vcodec=f.get("vcodec"),
@@ -417,18 +428,23 @@ class YtDlpService:
         strategies: list[dict] = []
 
         if mode == "video":
-            picked_id = None
+            picked_id: Optional[str] = None
             if format_id:
                 picked_id = str(format_id)
             else:
                 picked_id = self._pick_video_format_id(formats_for_choice, target_height=target_height, container=container)
+
+            # If user selected a muxed format (video+audio), don't force "+bestaudio"
+            fmt_by_id = {str(f.get("format_id")): f for f in formats_for_choice if f.get("format_id") is not None}
+            picked_fmt = fmt_by_id.get(picked_id) if picked_id else None
+            picked_is_muxed = bool(picked_fmt and self._is_muxed_av(picked_fmt))
 
             # Strategy 1: chosen stream + best audio
             if picked_id:
                 strategies.append(
                     {
                         "label": "chosen",
-                        "format": f"{picked_id}+bestaudio/best",
+                        "format": f"{picked_id}/best" if picked_is_muxed else f"{picked_id}+bestaudio/best",
                         "merge_output_format": container if container in ("mp4", "webm") else None,
                     }
                 )
@@ -436,10 +452,12 @@ class YtDlpService:
             # Strategy 2: relax container filter, still close to requested height
             relaxed_id = self._pick_video_format_id(formats_for_choice, target_height=target_height, container=None)
             if relaxed_id and relaxed_id != picked_id:
+                relaxed_fmt = fmt_by_id.get(relaxed_id)
+                relaxed_is_muxed = bool(relaxed_fmt and self._is_muxed_av(relaxed_fmt))
                 strategies.append(
                     {
                         "label": "relaxed",
-                        "format": f"{relaxed_id}+bestaudio/best",
+                        "format": f"{relaxed_id}/best" if relaxed_is_muxed else f"{relaxed_id}+bestaudio/best",
                         "merge_output_format": None,
                     }
                 )
