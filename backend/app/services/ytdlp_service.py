@@ -6,6 +6,7 @@ import uuid
 import logging
 import tempfile
 import glob
+import time
 from pathlib import Path
 from typing import Any, Iterable, List, Optional
 from pydantic import BaseModel
@@ -13,6 +14,7 @@ from app.api.websocket import manager
 from app.core.config import settings
 from app.core.admin_log import admin_log
 from app.services import ffmpeg_utils
+from app.services.rapidapi_service import rapidapi_service
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +222,52 @@ class YtDlpService:
         return opts
 
     async def get_video_info(self, url: str):
+        # Prefer RapidAPI provider when enabled (avoids YouTube anti-bot/cookies issues).
+        if (settings.DOWNLOAD_PROVIDER or "").strip().lower() == "rapidapi":
+            try:
+                payload = await rapidapi_service.fetch_formats(url)
+                available_formats = [
+                    VideoFormat(
+                        format_id=f.format_id,
+                        resolution=f.resolution,
+                        extension=f.extension,
+                        filesize_str=f.filesize_str,
+                        note=f.note or "",
+                        height=f.height,
+                        abr=f.abr,
+                        vcodec=f.vcodec,
+                        acodec=f.acodec,
+                    ).model_dump()
+                    for f in payload["video"]
+                ]
+                audio_formats = [
+                    VideoFormat(
+                        format_id=f.format_id,
+                        resolution=f.resolution,
+                        extension=f.extension,
+                        filesize_str=f.filesize_str,
+                        note=f.note or "Audio",
+                        height=f.height,
+                        abr=f.abr,
+                        vcodec=f.vcodec,
+                        acodec=f.acodec,
+                    ).model_dump()
+                    for f in payload["audio"]
+                ]
+                return {
+                    "title": payload.get("title"),
+                    "thumbnail": payload.get("thumbnail"),
+                    "description": f"Source: {payload.get('platform')}",
+                    "available_formats": available_formats,
+                    "audio_formats": audio_formats,
+                    "extractor": payload.get("platform"),
+                    "id": None,
+                    "formats_count": len(available_formats) + len(audio_formats),
+                }
+            except Exception as e:
+                admin_log.add("rapidapi_error", {"stage": "get_video_info", "error": str(e)})
+                # Fall back to yt-dlp if RapidAPI fails (misconfig/limits)
+
         loop = asyncio.get_running_loop()
         # Cookies can be required for some YouTube flows (consent/age/region).
         # Prefer env-provided cookies, fall back to local cookies.txt for dev.
@@ -538,6 +586,14 @@ class YtDlpService:
         container: Optional[str] = None,
         height: Optional[Any] = None,
     ):
+        # Prefer RapidAPI provider when enabled.
+        if (settings.DOWNLOAD_PROVIDER or "").strip().lower() == "rapidapi":
+            return await self._download_via_rapidapi(
+                url=url,
+                client_id=client_id,
+                format_id=format_id,
+                mode=mode,
+            )
         loop = asyncio.get_running_loop()
         
         downloads_dir = Path(settings.DOWNLOADS_DIR)
@@ -884,3 +940,102 @@ class YtDlpService:
             client_id,
         )
         raise Exception(last_error or "Download failed")
+
+    def _safe_filename(self, s: str) -> str:
+        s = (s or "").strip()
+        if not s:
+            return "download"
+        s = re.sub(r"[\\/:*?\"<>|]+", "_", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s[:80]
+
+    async def _download_via_rapidapi(self, *, url: str, client_id: str, format_id: Optional[str], mode: str):
+        downloads_dir = Path(settings.DOWNLOADS_DIR)
+        downloads_dir.mkdir(parents=True, exist_ok=True)
+        file_token = str(uuid.uuid4())
+
+        payload = await rapidapi_service.fetch_formats(url)
+        video = payload.get("video") or []
+        audio = payload.get("audio") or []
+        candidates = audio if mode == "audio" else video
+
+        chosen = None
+        if format_id:
+            for f in candidates:
+                if f.format_id == format_id:
+                    chosen = f
+                    break
+        if chosen is None and candidates:
+            chosen = candidates[0]
+        if chosen is None:
+            await manager.send_personal_message({"status": "error", "error": "No downloadable formats found (RapidAPI)."}, client_id)
+            raise Exception("No downloadable formats found (RapidAPI)")
+
+        ext = chosen.extension or ("mp3" if mode == "audio" else "mp4")
+        title = self._safe_filename(payload.get("title") or "video")
+        out_path = downloads_dir / f"{file_token}_{title}.{ext}"
+
+        await manager.send_personal_message(
+            {"status": "initializing", "percent": 0, "message": "Starting direct download..."},
+            client_id,
+        )
+
+        start = time.time()
+        last_emit = 0.0
+        downloaded = 0
+        total = None
+
+        import httpx
+
+        async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+            async with client.stream("GET", chosen.url) as resp:
+                resp.raise_for_status()
+                cl = resp.headers.get("content-length")
+                try:
+                    total = int(cl) if cl else None
+                except Exception:
+                    total = None
+
+                with open(out_path, "wb") as f:
+                    async for chunk in resp.aiter_bytes(chunk_size=1024 * 256):
+                        if not chunk:
+                            continue
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        now = time.time()
+                        if now - last_emit < 0.4:
+                            continue
+                        last_emit = now
+                        elapsed = max(0.001, now - start)
+                        speed_bps = downloaded / elapsed
+                        percent = 0
+                        eta = ""
+                        if total and total > 0:
+                            percent = min(99.9, (downloaded / total) * 100.0)
+                            rem = total - downloaded
+                            eta_s = int(rem / speed_bps) if speed_bps > 0 else 0
+                            eta = f"{eta_s}s" if eta_s < 60 else f"{eta_s//60}m {eta_s%60}s"
+                        await manager.send_personal_message(
+                            {
+                                "status": "downloading",
+                                "percent": float(percent),
+                                "speed": self._format_speed(speed_bps),
+                                "eta": eta,
+                                "downloaded_bytes": downloaded,
+                                "total_bytes": total,
+                            },
+                            client_id,
+                        )
+
+        await manager.send_personal_message(
+            {
+                "status": "completed",
+                "percent": 100,
+                "file_token": file_token,
+                "filename": out_path.name,
+                "note": "rapidapi",
+            },
+            client_id,
+        )
+        admin_log.add("download_completed", {"client_id": client_id, "label": "rapidapi", "filename": out_path.name})
+        return file_token, str(out_path)

@@ -302,6 +302,8 @@ async def diagnostics():
         "yt_dlp_version": ytdlp_version,
         "has_deno": shutil.which("deno") is not None,
         "has_ffmpeg": shutil.which("ffmpeg") is not None,
+        "download_provider": (settings.DOWNLOAD_PROVIDER or "ytdlp"),
+        "rapidapi_configured": bool((settings.RAPIDAPI_KEY or "").strip()),
         "cookies_env_set": bool(env_cookie_b64 or env_cookie_path),
         "cookies_file_found": has_cookie_file,
         "proxy_set": bool((os.getenv("YTDLP_PROXY") or "").strip()),
