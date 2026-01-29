@@ -4,15 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { applySettings, defaultSettings, loadSettings, saveSettings, type AppSettings } from '@/lib/settings';
 
 export function useSettings() {
-    const [settings, setSettings] = useState<AppSettings>(defaultSettings);
-    const [ready, setReady] = useState(false);
+    const [settings, setSettings] = useState<AppSettings>(() => loadSettings() || defaultSettings);
 
     useEffect(() => {
-        const loaded = loadSettings();
-        setSettings(loaded);
-        applySettings(loaded);
-        setReady(true);
-    }, []);
+        applySettings(settings);
+    }, [settings]);
 
     const updateSettings = useCallback((patch: Partial<AppSettings>) => {
         setSettings((prev) => {
@@ -26,6 +22,6 @@ export function useSettings() {
     return {
         settings,
         updateSettings,
-        ready,
+        ready: true,
     };
 }

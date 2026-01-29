@@ -1,4 +1,5 @@
 'use client';
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InsightsPanel } from "@/components/modules/ai/InsightsPanel";
 import { QualitySelector, type VideoFormat } from "@/components/QualitySelector";
@@ -11,6 +12,8 @@ import { AiFixPanel } from "@/components/modules/debug/AiFixPanel";
 import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { UpscaleButton } from "@/components/UpscaleButton";
+import { useAuth } from "@/hooks/useAuth";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { useSettings } from "@/hooks/useSettings";
 import { t } from "@/lib/i18n";
 import { PlatformIcon, type PlatformId } from "@/components/PlatformIcon";
@@ -21,6 +24,8 @@ const TOOL_STATE_DEBOUNCE_MS = 500;
 
 export default function ToolPage() {
     const { settings, updateSettings } = useSettings();
+    const auth = useAuth();
+    const entitlements = useEntitlements();
     const lang = settings.language;
     const [showAdmin, setShowAdmin] = useState(false);
     const [url, setUrl] = useState("");
@@ -86,20 +91,27 @@ export default function ToolPage() {
                 setShowRestoredBanner(true);
             }
         }
+    }, []);
 
-        wsRef.current = new WebSocketClient(clientId, (data) => {
-            setStatus((prev) => ({ ...prev, ...data }));
-            if (data.status === "error" && data.error) {
-                setLastErrorStage("download");
-                setLastError(data.error);
-            }
-            if (data.status === "completed" && data.file_token) {
-                setDownloadedFile({ token: data.file_token, filename: data.filename });
-            }
-        });
+    useEffect(() => {
+        wsRef.current?.close();
+        wsRef.current = new WebSocketClient(
+            clientId,
+            (data) => {
+                setStatus((prev) => ({ ...prev, ...data }));
+                if (data.status === "error" && data.error) {
+                    setLastErrorStage("download");
+                    setLastError(data.error);
+                }
+                if (data.status === "completed" && data.file_token) {
+                    setDownloadedFile({ token: data.file_token, filename: data.filename });
+                }
+            },
+            { accessToken: auth.accessToken }
+        );
         wsRef.current.connect();
         return () => wsRef.current?.close();
-    }, [clientId]);
+    }, [clientId, auth.accessToken]);
 
     useEffect(() => {
         // Persist tool state so users can navigate away and resume.
@@ -170,7 +182,10 @@ export default function ToolPage() {
         setLastError("");
 
         try {
-            const data = await analyzeVideo(u, { ai: settings.aiInsightsEnabled, lang: settings.language });
+            const data = await analyzeVideo(u, {
+                ai: settings.aiInsightsEnabled && entitlements.aiEnabled,
+                lang: settings.language,
+            });
             setVideoInfo({
                 title: data.title,
                 thumbnail: data.thumbnail,
@@ -193,6 +208,16 @@ export default function ToolPage() {
     function onDownload() {
         const u = url.trim();
         if (!u || !wsRef.current) return;
+        if (auth.configured && !auth.user) {
+            setLastErrorStage("download");
+            setLastError(t(lang, "subs.loginRequired"));
+            return;
+        }
+        if (entitlements.plan === "free" && entitlements.downloadsRemaining === 0) {
+            setLastErrorStage("download");
+            setLastError(t(lang, "subs.freeLimitReached"));
+            return;
+        }
         setLastError("");
         setDownloadedFile(null);
         setStatus({ status: "initializing", percent: 0, speed: "", eta: "" });
@@ -200,6 +225,7 @@ export default function ToolPage() {
             mode: downloadMode,
             format_id: selectedFormatId || undefined,
         });
+        void entitlements.refresh();
     }
 
     async function onDownloadFile() {
@@ -454,6 +480,21 @@ export default function ToolPage() {
                                                 {t(lang, "tool.websocket")}: {wsRef.current?.isConnected ? t(lang, "tool.wsConnected") : t(lang, "tool.wsReconnecting")}
                                             </div>
                                         </div>
+                                        {auth.configured && (
+                                            <div className="text-[11px] font-mono text-[var(--foreground)] opacity-65">
+                                                {auth.user ? (
+                                                    entitlements.plan === "ultimate" ? (
+                                                        t(lang, "subs.planUltimate")
+                                                    ) : (
+                                                        t(lang, "subs.planFreeRemaining", { remaining: String(entitlements.downloadsRemaining ?? 0) })
+                                                    )
+                                                ) : (
+                                                    <Link href="/auth" className="underline underline-offset-4">
+                                                        {t(lang, "subs.loginToUse")}
+                                                    </Link>
+                                                )}
+                                            </div>
+                                        )}
                                         <QualitySelector
                                             availableFormats={availableFormats}
                                             audioFormats={audioFormats}
@@ -472,7 +513,7 @@ export default function ToolPage() {
                                             }}
                                         />
 
-                                        {settings.upscaleEnabled && (
+                                        {settings.upscaleEnabled && entitlements.aiEnabled && (
                                             <UpscaleButton
                                                 videoUrl={url.trim()}
                                                 fileToken={downloadedFile?.token || undefined}
@@ -486,6 +527,8 @@ export default function ToolPage() {
                                                 status.status === "downloading"
                                                 || status.status === "finishing"
                                                 || status.status === "initializing"
+                                                || (auth.configured && !auth.user)
+                                                || (entitlements.plan === "free" && entitlements.downloadsRemaining === 0)
                                             }
                                             className="w-full h-12 text-sm font-semibold"
                                         >
@@ -534,14 +577,14 @@ export default function ToolPage() {
                                 </Card>
                             )}
 
-                            {settings.aiFixEnabled && lastError && (
+                            {settings.aiFixEnabled && entitlements.aiEnabled && lastError && (
                                 <AiFixPanel stage={lastErrorStage} url={url.trim()} error={lastError} />
                             )}
                         </div>
 
                         <div className="lg:col-span-5 space-y-6">
                             <AdminLogsPanel enabled={showAdmin} />
-                            {settings.aiInsightsEnabled && (
+                            {settings.aiInsightsEnabled && entitlements.aiEnabled && (
                                 <InsightsPanel
                                     data={analysisData}
                                     isLoading={isAnalyzing}

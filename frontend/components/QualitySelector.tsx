@@ -44,7 +44,7 @@ export function QualitySelector({
         onSelect(id, mode);
     };
 
-    const targetHeights = mode === 'video' ? [2160, 1440, 1080, 720, 480, 360, 240] : [];
+    const targetHeights = useMemo(() => (mode === 'video' ? [2160, 1440, 1080, 720, 480, 360, 240] : []), [mode]);
 
     const getHeight = (fmt: VideoFormat): number | null => {
         if (typeof fmt.height === 'number' && fmt.height > 0) return fmt.height;
@@ -84,7 +84,7 @@ export function QualitySelector({
             return (getHeight(b) || 0) - (getHeight(a) || 0);
         });
         return sorted;
-    }, [formats, mode, selectedId]);
+    }, [formats, mode, selectedId, targetHeights]);
 
     const labelForHeight = (h: number) => {
         if (h === 2160) return '2160p · 4K';

@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useSettings } from "@/hooks/useSettings";
 import { t } from "@/lib/i18n";
+import { getSupabaseClient } from "@/lib/supabase";
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api` : "/api";
 
@@ -38,9 +39,14 @@ export function AiFixPanel({
         setReqError(null);
         setResult(null);
         try {
+            const supabase = getSupabaseClient();
+            const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token : null;
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            if (token) headers.Authorization = `Bearer ${token}`;
+
             let res = await fetch(`${API_BASE}/ai/diagnose`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers,
                 body: JSON.stringify({
                     stage,
                     url,
@@ -56,7 +62,9 @@ export function AiFixPanel({
                     url,
                     error,
                 });
-                res = await fetch(`${API_BASE}/ai/diagnose?${qs.toString()}`, { method: "GET" });
+                const getHeaders: Record<string, string> = {};
+                if (token) getHeaders.Authorization = `Bearer ${token}`;
+                res = await fetch(`${API_BASE}/ai/diagnose?${qs.toString()}`, { method: "GET", headers: getHeaders });
             }
 
             const json = await res.json().catch(() => null);

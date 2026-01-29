@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
 import { useSettings } from '@/hooks/useSettings';
 import { t } from '@/lib/i18n';
+import { getSupabaseClient } from '@/lib/supabase';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -58,7 +59,10 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
 
         pollingRef.current = window.setInterval(async () => {
             try {
-                const res = await fetch(`${apiBase}/upscale/status/${predictionId}`);
+                const supabase = getSupabaseClient();
+                const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token : null;
+                const headers: Record<string, string> | undefined = token ? { Authorization: `Bearer ${token}` } : undefined;
+                const res = await fetch(`${apiBase}/upscale/status/${predictionId}`, { headers });
                 if (!res.ok) return;
                 const data = await res.json();
                 if (data.rawStatus === 'failed' || data.rawStatus === 'canceled') {
@@ -121,9 +125,14 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
         });
 
         try {
+            const supabase = getSupabaseClient();
+            const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token : null;
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) headers.Authorization = `Bearer ${token}`;
+
             const res = await fetch(`${apiBase}/upscale`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({
                     ...(fileToken ? { fileToken } : { videoUrl }),
                     model: settings.defaultUpscaleModel,

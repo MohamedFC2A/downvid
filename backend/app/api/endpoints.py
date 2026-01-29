@@ -6,9 +6,11 @@ from pathlib import Path
 from app.api.websocket import manager
 from app.core.config import settings
 from app.core.admin_log import admin_log
+from app.core.auth import get_user_id_from_authorization, require_user_id, require_ultimate
 from app.services.ytdlp_service import YtDlpService, VideoFormat
 from app.services.deepseek_service import deepseek_service
 from app.services.replicate_upscale_service import MODEL_MAP, replicate_upscale_service
+from app.services.supabase_service import supabase_service
 import yt_dlp
 import shutil
 import os
@@ -128,6 +130,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f"WebSocket connection attempt from client: {client_id}")
+
+    access_token = websocket.query_params.get("access_token")
+    user_id = None
+    if access_token:
+        user_id = get_user_id_from_authorization(f"Bearer {access_token}")
     
     await manager.connect(websocket, client_id)
     logger.info(f"WebSocket connected: {client_id}")
@@ -140,6 +147,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             
             # Expecting: { action: "start_download", url: "...", format_id: "...", mode: "video"|"audio" }
             if data.get("action") == "start_download":
+                if settings.SUPABASE_ENABLED and not user_id:
+                    await manager.send_personal_message(
+                        {"status": "error", "error": "Login required to download (Supabase)"},
+                        client_id,
+                    )
+                    continue
+
                 url = (data.get("url") or "").strip()
                 format_id = data.get("format_id")
                 mode = data.get("mode", "video")
@@ -147,6 +161,26 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 height = data.get("height")
                 
                 if url and (url.startswith("http://") or url.startswith("https://")):
+                    if settings.SUPABASE_ENABLED and user_id:
+                        try:
+                            quota = await supabase_service.consume_download(user_id)
+                            if not bool(quota.get("allowed")):
+                                remaining = quota.get("downloads_remaining")
+                                await manager.send_personal_message(
+                                    {
+                                        "status": "error",
+                                        "error": f"FREE limit reached (5 downloads). Remaining: {remaining}",
+                                    },
+                                    client_id,
+                                )
+                                continue
+                        except Exception as e:
+                            await manager.send_personal_message(
+                                {"status": "error", "error": f"Subscription check failed: {e}"},
+                                client_id,
+                            )
+                            continue
+
                     logger.info(f"Starting download for {client_id}: {url}")
                     await ytdlp_service.download_video(
                         url=url,
@@ -176,8 +210,18 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         admin_log.add("ws_error", {"client_id": client_id, "error": str(e)})
 
 @router.post("/analyze", response_model=AnalyzeResponse)
-async def analyze_video(request: AnalyzeRequest, ai: bool = True, lang: str = "ar"):
+async def analyze_video(
+    request: AnalyzeRequest,
+    ai: bool = True,
+    lang: str = "ar",
+    authorization: str | None = Header(default=None),
+):
     try:
+        if ai and settings.SUPABASE_ENABLED:
+            user_id = require_user_id(authorization)
+            profile = await supabase_service.get_or_create_profile(user_id)
+            require_ultimate(profile.plan)
+
         # 1. Get Metadata & Formats
         info = await ytdlp_service.get_video_info(request.url)
         title = info.get('title', 'Unknown Title')
@@ -249,7 +293,12 @@ async def analyze_video(request: AnalyzeRequest, ai: bool = True, lang: str = "a
 
 
 @router.post("/summarize")
-async def summarize_video(req: SummarizeRequest, ai: bool = True, lang: str = "ar"):
+async def summarize_video(
+    req: SummarizeRequest,
+    ai: bool = True,
+    lang: str = "ar",
+    authorization: str | None = Header(default=None),
+):
     """
     User-triggered "Summarize video" action.
     Best-effort: tries transcript via yt-dlp subtitles; falls back to metadata.
@@ -273,6 +322,11 @@ async def summarize_video(req: SummarizeRequest, ai: bool = True, lang: str = "a
             "topics": [],
             "notes": "AI disabled",
         }
+
+    if settings.SUPABASE_ENABLED:
+        user_id = require_user_id(authorization)
+        profile = await supabase_service.get_or_create_profile(user_id)
+        require_ultimate(profile.plan)
 
     result = await deepseek_service.summarize_video(
         title=title,
@@ -324,7 +378,11 @@ async def diagnostics():
 
 
 @router.post("/ai/diagnose")
-async def ai_diagnose(req: DiagnoseRequest):
+async def ai_diagnose(req: DiagnoseRequest, authorization: str | None = Header(default=None)):
+    if settings.SUPABASE_ENABLED:
+        user_id = require_user_id(authorization)
+        profile = await supabase_service.get_or_create_profile(user_id)
+        require_ultimate(profile.plan)
     if not settings.DEEPSEEK_API_KEY:
         raise HTTPException(status_code=503, detail="DEEPSEEK_API_KEY is not configured on the server")
     # Attach a small amount of recent admin logs for context (sanitized)
@@ -351,13 +409,14 @@ async def ai_diagnose_get(
     stage: str = "other",
     url: str = "",
     error: str = "",
+    authorization: str | None = Header(default=None),
 ):
     """
     GET fallback for environments where POST is blocked/misrouted.
     Note: URL + error are truncated server-side by validation in DiagnoseRequest.
     """
     req = DiagnoseRequest(stage=stage, url=url, error=error, context={})
-    return await ai_diagnose(req)
+    return await ai_diagnose(req, authorization=authorization)
 
 
 class UpscaleRequest(BaseModel):
@@ -383,7 +442,12 @@ async def upscale_info():
 
 
 @router.post("/upscale")
-async def upscale_start(payload: UpscaleRequest, request: Request):
+async def upscale_start(payload: UpscaleRequest, request: Request, authorization: str | None = Header(default=None)):
+    if settings.SUPABASE_ENABLED:
+        user_id = require_user_id(authorization)
+        profile = await supabase_service.get_or_create_profile(user_id)
+        require_ultimate(profile.plan)
+
     source_url = (payload.video_url or "").strip()
     if not source_url:
         file_token = (payload.file_token or "").strip()
@@ -408,7 +472,11 @@ async def upscale_start(payload: UpscaleRequest, request: Request):
 
 
 @router.get("/upscale/status/{prediction_id}")
-async def upscale_status(prediction_id: str):
+async def upscale_status(prediction_id: str, authorization: str | None = Header(default=None)):
+    if settings.SUPABASE_ENABLED:
+        user_id = require_user_id(authorization)
+        profile = await supabase_service.get_or_create_profile(user_id)
+        require_ultimate(profile.plan)
     try:
         prediction = await replicate_upscale_service.get_prediction(prediction_id)
         raw_status = prediction.get("status")
@@ -458,3 +526,51 @@ async def serve_file(file_token: str):
     except Exception as e:
         print(f"Serve error: {e}")
         raise HTTPException(status_code=404, detail="File not found")
+
+
+@router.get("/me")
+async def get_me(authorization: str | None = Header(default=None)):
+    """
+    Returns the current user's subscription/usage information (Supabase).
+    """
+    if not settings.SUPABASE_ENABLED:
+        return {
+            "supabase_enabled": False,
+            "plan": "ultimate",
+            "downloads_used": 0,
+            "downloads_remaining": None,
+            "ai_enabled": True,
+        }
+
+    user_id = require_user_id(authorization)
+    profile = await supabase_service.get_or_create_profile(user_id)
+    return {
+        "supabase_enabled": True,
+        "user_id": profile.user_id,
+        "plan": profile.plan,
+        "downloads_used": profile.downloads_used,
+        "downloads_remaining": profile.downloads_remaining,
+        "ai_enabled": profile.ai_enabled,
+    }
+
+
+class AdminSetPlanRequest(BaseModel):
+    user_id: str
+    plan: str
+
+
+@router.post("/admin/set-plan")
+async def admin_set_plan(payload: AdminSetPlanRequest, x_admin_token: str | None = Header(default=None)):
+    if settings.ADMIN_TOKEN and x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        profile = await supabase_service.set_plan(user_id=payload.user_id, plan=payload.plan)
+        return {
+            "user_id": profile.user_id,
+            "plan": profile.plan,
+            "downloads_used": profile.downloads_used,
+            "downloads_remaining": profile.downloads_remaining,
+            "ai_enabled": profile.ai_enabled,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

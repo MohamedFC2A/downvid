@@ -6,10 +6,12 @@ import { useState } from 'react';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/Button';
 import { useSettings } from '@/hooks/useSettings';
+import { useAuth } from '@/hooks/useAuth';
 import { t } from '@/lib/i18n';
 
 export function Navbar() {
     const { settings } = useSettings();
+    const auth = useAuth();
     const pathname = usePathname();
     const isRtl = settings.language === 'ar';
     const [open, setOpen] = useState(false);
@@ -17,6 +19,7 @@ export function Navbar() {
     const nav = [
         { href: '/tool', key: 'nav.tool' as const },
         { href: '/settings', key: 'nav.settings' as const },
+        { href: '/subscriptions', key: 'nav.subscriptions' as const },
         { href: '#', key: 'nav.docs' as const },
     ];
 
@@ -63,9 +66,11 @@ export function Navbar() {
                         );
                     })}
                     <div className="h-4 w-px bg-[var(--panel-border)]" />
-                    <Button variant="secondary" className="h-8 text-xs">
-                        {t(settings.language, 'nav.login')}
-                    </Button>
+                    <Link href="/auth">
+                        <Button variant="secondary" className="h-8 text-xs">
+                            {auth.user ? t(settings.language, 'nav.account') : t(settings.language, 'nav.login')}
+                        </Button>
+                    </Link>
                 </div>
             </div>
 
@@ -89,9 +94,11 @@ export function Navbar() {
                             );
                         })}
                         <div className="pt-1">
-                            <Button variant="secondary" className="h-10 w-full text-sm" onClick={() => setOpen(false)}>
-                                {t(settings.language, 'nav.login')}
-                            </Button>
+                            <Link href="/auth" onClick={() => setOpen(false)}>
+                                <Button variant="secondary" className="h-10 w-full text-sm">
+                                    {auth.user ? t(settings.language, 'nav.account') : t(settings.language, 'nav.login')}
+                                </Button>
+                            </Link>
                         </div>
                     </div>
                 </div>

@@ -1,7 +1,10 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 import { useSettings } from '@/hooks/useSettings';
+import { useAuth } from '@/hooks/useAuth';
+import { useEntitlements } from '@/hooks/useEntitlements';
 import { Logo } from '@/components/Logo';
 import type { AppLanguage, ThemeMode, UpscaleModel } from '@/lib/settings';
 import { t } from '@/lib/i18n';
@@ -23,10 +26,13 @@ const modelOptions: Array<{ id: UpscaleModel; titleKey: string; descKey: string 
 
 export function SettingsPage() {
     const { settings, updateSettings, ready } = useSettings();
+    const auth = useAuth();
+    const entitlements = useEntitlements();
     const lang = settings.language;
     const rtl = lang === 'ar';
     const motionDuration = settings.reducedMotion ? 0 : 0.5;
     const motionDelay = settings.reducedMotion ? 0 : 0.1;
+    const aiLocked = auth.configured && !entitlements.aiEnabled;
 
     return (
         <main className="min-h-screen pt-28 pb-20 px-6 relative overflow-hidden">
@@ -150,29 +156,52 @@ export function SettingsPage() {
                             <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.ai')}</div>
                             <h2 className="text-lg font-semibold text-[var(--foreground)] mt-2">{t(lang, 'settings.upscaleModelTitle')}</h2>
                         </div>
+                        {aiLocked && (
+                            <div className="mb-5 rounded-2xl border border-[var(--panel-border)] bg-[var(--deep)] p-4 text-xs text-[var(--foreground)] opacity-75">
+                                {auth.user ? (
+                                    <>
+                                        {t(lang, 'subs.aiLocked')}
+                                        {' '}
+                                        <Link className="underline underline-offset-4" href="/subscriptions">
+                                            {t(lang, 'subs.upgradeCta')}
+                                        </Link>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Link className="underline underline-offset-4" href="/auth">
+                                            {t(lang, 'subs.loginToUse')}
+                                        </Link>
+                                        {' '}
+                                        <Link className="underline underline-offset-4" href="/subscriptions">
+                                            {t(lang, 'subs.seePlans')}
+                                        </Link>
+                                    </>
+                                )}
+                            </div>
+                        )}
                         <div className="space-y-6 mb-6">
                             <ToggleRow
                                 label={t(lang, "settings.aiInsights")}
                                 description={t(lang, "settings.aiInsightsDesc")}
-                                enabled={settings.aiInsightsEnabled}
+                                enabled={settings.aiInsightsEnabled && !aiLocked}
                                 onToggle={() => updateSettings({ aiInsightsEnabled: !settings.aiInsightsEnabled })}
-                                disabled={!ready}
+                                disabled={!ready || aiLocked}
                                 rtl={rtl}
                             />
                             <ToggleRow
                                 label={t(lang, "settings.aiFix")}
                                 description={t(lang, "settings.aiFixDesc")}
-                                enabled={settings.aiFixEnabled}
+                                enabled={settings.aiFixEnabled && !aiLocked}
                                 onToggle={() => updateSettings({ aiFixEnabled: !settings.aiFixEnabled })}
-                                disabled={!ready}
+                                disabled={!ready || aiLocked}
                                 rtl={rtl}
                             />
                             <ToggleRow
                                 label={t(lang, "settings.aiUpscale")}
                                 description={t(lang, "settings.aiUpscaleDesc")}
-                                enabled={settings.upscaleEnabled}
+                                enabled={settings.upscaleEnabled && !aiLocked}
                                 onToggle={() => updateSettings({ upscaleEnabled: !settings.upscaleEnabled })}
-                                disabled={!ready}
+                                disabled={!ready || aiLocked}
                                 rtl={rtl}
                             />
                         </div>

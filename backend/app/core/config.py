@@ -43,5 +43,20 @@ class Settings:
 
     # Admin/debug
     ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "")
+
+    # Supabase (Auth + subscriptions/usage)
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    # Server-side key used for PostgREST/RPC calls. Keep secret.
+    SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    # Used to verify Supabase JWTs (HS256). Keep secret.
+    SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", "")
+
+    @property
+    def SUPABASE_ENABLED(self) -> bool:
+        return bool(
+            (self.SUPABASE_URL or "").strip()
+            and (self.SUPABASE_SERVICE_ROLE_KEY or "").strip()
+            and (self.SUPABASE_JWT_SECRET or "").strip()
+        )
     
 settings = Settings()

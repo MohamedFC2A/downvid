@@ -21,11 +21,13 @@ export type DownloadStatus = {
  * Uses NEXT_PUBLIC_WS_URL if set, otherwise derives from NEXT_PUBLIC_BACKEND_URL,
  * otherwise falls back to current host (for same-origin deployments).
  */
-function getWebSocketUrl(clientId: string): string {
+function getWebSocketUrl(clientId: string, accessToken?: string | null): string {
     // First check for explicit WebSocket URL
+    const qs = accessToken ? `?access_token=${encodeURIComponent(accessToken)}` : '';
+
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
     if (wsUrl) {
-        return `${wsUrl}/api/download/${clientId}`;
+        return `${wsUrl}/api/download/${clientId}${qs}`;
     }
 
     // Derive from backend URL (convert http(s) to ws(s))
@@ -33,17 +35,17 @@ function getWebSocketUrl(clientId: string): string {
     if (backendUrl) {
         const wsProtocol = backendUrl.startsWith('https') ? 'wss' : 'ws';
         const hostPart = backendUrl.replace(/^https?:\/\//, '');
-        return `${wsProtocol}://${hostPart}/api/download/${clientId}`;
+        return `${wsProtocol}://${hostPart}/api/download/${clientId}${qs}`;
     }
 
     // Fallback: same origin (for local dev or single-container deploys)
     if (typeof window !== 'undefined') {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        return `${protocol}//${window.location.host}/api/download/${clientId}`;
+        return `${protocol}//${window.location.host}/api/download/${clientId}${qs}`;
     }
 
     // Server-side fallback (shouldn't be used for WebSocket)
-    return `ws://localhost:8000/api/download/${clientId}`;
+    return `ws://localhost:8000/api/download/${clientId}${qs}`;
 }
 
 export class WebSocketClient {
@@ -57,9 +59,9 @@ export class WebSocketClient {
     private reconnectTimer: number | null = null;
     private sendQueue: string[] = [];
 
-    constructor(clientId: string, onMessage: (data: DownloadStatus) => void) {
+    constructor(clientId: string, onMessage: (data: DownloadStatus) => void, opts?: { accessToken?: string | null }) {
         this.clientId = clientId;
-        this.url = getWebSocketUrl(clientId);
+        this.url = getWebSocketUrl(clientId, opts?.accessToken);
         this.onMessage = onMessage;
         console.log(`[WS] URL: ${this.url}`);
     }

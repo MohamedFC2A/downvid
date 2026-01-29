@@ -1,6 +1,15 @@
 import type { VideoFormat } from "@/components/QualitySelector";
+import { getSupabaseClient } from "@/lib/supabase";
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api` : "/api";
+
+async function authHeaders(): Promise<Record<string, string>> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return {};
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export type AnalyzeResult = {
     title: string;
@@ -31,7 +40,7 @@ export async function analyzeVideo(url: string, opts?: { ai?: boolean; lang?: st
 
     const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({ url }),
     });
     if (!res.ok) {
@@ -70,7 +79,7 @@ export async function summarizeVideo(url: string, opts?: { ai?: boolean; lang?: 
 
     const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({ url }),
     });
     const json = await res.json().catch(() => null);

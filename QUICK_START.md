@@ -26,6 +26,42 @@ Get your API key from: https://platform.deepseek.com/
 
 ---
 
+## 🔐 Supabase (Subscriptions)
+
+This project supports 2 plans:
+- **FREE**: 5 downloads, no AI features
+- **Ultimate**: unlimited downloads + all AI features
+
+### 1) Create tables/functions
+In Supabase SQL Editor, run:
+- `backend/supabase/schema.sql`
+
+### 2) Backend env
+Set these in `backend/.env`:
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_JWT_SECRET=...
+```
+
+### 3) Frontend env
+Set these in `frontend/.env.local` (or your platform env):
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
+
+### 4) Google Sign-in (OAuth)
+In Google Cloud Console, set **Authorized redirect URIs** to:
+`https://rbihfnliubohjjmkssyi.supabase.co/auth/v1/callback`
+
+In Supabase Dashboard:
+- Authentication → Providers → Google: enable it
+- Authentication → URL Configuration:
+  - Add redirect URLs like `http://localhost:3000/auth/callback` and your production domain.
+
+---
+
 ## ▶️ Running the App (Every Time)
 
 ### Option 1: Two Terminals
