@@ -212,7 +212,7 @@ export default function ToolPage() {
         }
     }
 
-    const inputAccent = isUrlValid ? 'border-emerald-500/60 focus-visible:border-emerald-500/70 focus-visible:ring-emerald-500/25' : '';
+    const inputAccent = isUrlValid ? 'border-[var(--foreground)] focus-visible:border-[var(--foreground)]' : '';
 
     const handleFocus = async () => {
         if (!settings.autoPaste) return;
@@ -270,7 +270,7 @@ export default function ToolPage() {
                                     {/* Platform Icon Indicator */}
                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none transition-colors duration-300">
                                         {platformDetected ? (
-                                            <span className="text-cyan-400">
+                                            <span className="text-[var(--foreground)]">
                                                 <div className="w-7 h-7 flex items-center justify-center rounded border border-[var(--panel-border)] bg-[var(--deep)]">
                                                     <PlatformIcon platform={platformId} className="w-5 h-5" />
                                                 </div>

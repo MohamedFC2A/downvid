@@ -37,7 +37,7 @@ export function SettingsPage() {
                 <header className="flex flex-col gap-4">
                     <Logo />
                     <div className="space-y-2">
-                        <p className="text-xs uppercase tracking-[0.35em] text-cyan-200/70 font-mono">{t(lang, 'settings.kicker')}</p>
+                        <p className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.35em]"}`}>{t(lang, 'settings.kicker')}</p>
                         <h1 className="text-3xl md:text-4xl font-semibold text-zinc-100">{t(lang, 'settings.title')}</h1>
                         <p className="text-zinc-400 max-w-2xl">
                             {t(lang, 'settings.subtitle')}
@@ -53,7 +53,7 @@ export function SettingsPage() {
                         className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
                     >
                         <div className="mb-6">
-                            <div className="text-xs uppercase tracking-[0.3em] text-cyan-200/70">{t(lang, 'settings.appearance')}</div>
+                            <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.appearance')}</div>
                             <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.themeTitle')}</h2>
                         </div>
                         <div className="space-y-4">
@@ -76,7 +76,7 @@ export function SettingsPage() {
                         </div>
                         <div className="mt-6 border-t border-[var(--panel-border)] pt-6 space-y-6">
                             <div>
-                                <div className="text-xs uppercase tracking-[0.3em] text-cyan-200/70">{t(lang, 'settings.languageKicker')}</div>
+                                <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.languageKicker')}</div>
                                 <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.languageTitle')}</h2>
                             </div>
                             <div className="space-y-4">
@@ -115,7 +115,7 @@ export function SettingsPage() {
                         className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
                     >
                         <div className="mb-6">
-                            <div className="text-xs uppercase tracking-[0.3em] text-emerald-200/70">{t(lang, 'settings.network')}</div>
+                            <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.network')}</div>
                             <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.bandwidth')}</h2>
                         </div>
                         <div className="space-y-6">
@@ -143,7 +143,7 @@ export function SettingsPage() {
                         className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
                     >
                         <div className="mb-6">
-                            <div className="text-xs uppercase tracking-[0.3em] text-amber-200/70">{t(lang, 'settings.ai')}</div>
+                            <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.ai')}</div>
                             <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.upscaleModelTitle')}</h2>
                         </div>
                         <div className="space-y-6 mb-6">

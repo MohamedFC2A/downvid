@@ -177,7 +177,7 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.3 }}
-                        className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] px-4 py-3 font-mono text-xs text-emerald-300 space-y-1"
+                        className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] px-4 py-3 font-mono text-xs text-[var(--foreground)] opacity-80 space-y-1"
                     >
                         {logs.map((line, idx) => (
                             <div key={`${line}-${idx}`}>{line}</div>

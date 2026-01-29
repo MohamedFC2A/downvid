@@ -32,7 +32,7 @@ export default function Home() {
             </div>
             <h1 className="font-display text-4xl leading-[1.05] text-zinc-100 sm:text-5xl md:text-6xl">
               {t(lang, "home.headline1")}
-              <span className="block text-[clamp(2.4rem,6vw,4.3rem)] text-amber-200/90">
+              <span className="block text-[clamp(2.4rem,6vw,4.3rem)] text-[var(--foreground)] opacity-90">
                 {t(lang, "home.headline2")}
               </span>
             </h1>
@@ -74,7 +74,7 @@ export default function Home() {
                 key={card.title}
                 className="rounded-2xl border border-white/10 bg-black/40 p-5 backdrop-blur-lg"
               >
-                <div className="text-xs uppercase tracking-[0.3em] text-amber-200/70">
+                <div className="text-xs uppercase tracking-[0.3em] text-[var(--foreground)] opacity-70">
                   {card.title}
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-zinc-300">{card.desc}</p>

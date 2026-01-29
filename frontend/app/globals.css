@@ -11,37 +11,38 @@
 :root {
   --background: #06070b;
   --foreground: #f8f7f4;
-  --ember: #ffb457;
-  --glow: #f35b4a;
-  --deep: #10121a;
-  --panel: rgba(12, 14, 20, 0.6);
-  --panel-border: rgba(80, 230, 255, 0.2);
-  --accent: #32f7ff;
-  --accent-soft: rgba(50, 247, 255, 0.18);
+  --ember: #f8f7f4;
+  --glow: #f8f7f4;
+  --deep: #0b0d12;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel-border: rgba(255, 255, 255, 0.12);
+  --accent: #f8f7f4;
+  --accent-soft: rgba(255, 255, 255, 0.10);
 }
 
 :root[data-theme="midnight"] {
   --background: #05060a;
   --foreground: #f8f7f4;
-  --ember: #ffb457;
-  --glow: #f35b4a;
-  --deep: #10121a;
-  --panel: rgba(10, 12, 18, 0.7);
-  --panel-border: rgba(86, 255, 232, 0.22);
-  --accent: #38bdf8;
-  --accent-soft: rgba(56, 189, 248, 0.18);
+  --ember: #f8f7f4;
+  --glow: #f8f7f4;
+  --deep: #0b0d12;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel-border: rgba(255, 255, 255, 0.14);
+  --accent: #f8f7f4;
+  --accent-soft: rgba(255, 255, 255, 0.10);
 }
 
 :root[data-theme="neon"] {
-  --background: #05050d;
-  --foreground: #eaf6ff;
-  --ember: #32f7ff;
-  --glow: #21ffb1;
-  --deep: #0b0f1e;
-  --panel: rgba(4, 8, 14, 0.7);
-  --panel-border: rgba(64, 255, 226, 0.32);
-  --accent: #32f7ff;
-  --accent-soft: rgba(50, 247, 255, 0.2);
+  /* Deprecated: keep monochrome so old settings don't introduce color */
+  --background: #05060a;
+  --foreground: #f8f7f4;
+  --ember: #f8f7f4;
+  --glow: #f8f7f4;
+  --deep: #0b0d12;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel-border: rgba(255, 255, 255, 0.14);
+  --accent: #f8f7f4;
+  --accent-soft: rgba(255, 255, 255, 0.10);
 }
 
 :root[data-theme="light"] {
@@ -63,6 +64,15 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Hide scrollbars for glass UI */
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 /* Base helpers */
