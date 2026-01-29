@@ -401,7 +401,15 @@ Rules:
                 const j = (await res.json().catch(() => null)) as { choices?: Array<{ message?: { content?: unknown } }> } | null;
                 const content = j?.choices?.[0]?.message?.content;
                 if (typeof content === 'string') {
-                    analysis = (JSON.parse(content) as AnyRecord) || null;
+                    try {
+                        analysis = (JSON.parse(content) as AnyRecord) || null;
+                    } catch {
+                        // Some models occasionally return non-strict JSON even with response_format.
+                        // Ignore analysis rather than failing the entire request.
+                        analysis = null;
+                    }
+                } else {
+                    analysis = asRecord(content) || null;
                 }
             }
         }

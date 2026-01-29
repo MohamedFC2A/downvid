@@ -17,7 +17,7 @@ export type Entitlements = {
 };
 
 export function useEntitlements(): Entitlements {
-    const { accessToken } = useAuth();
+    const { accessToken, configured } = useAuth();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [plan, setPlan] = useState<Entitlements['plan']>('unknown');
@@ -32,6 +32,19 @@ export function useEntitlements(): Entitlements {
     }, [accessToken]);
 
     const refresh = useCallback(async () => {
+        // If Supabase is configured but user isn't logged in yet, skip calling /api/me to avoid noisy 401s.
+        // Downloads are already blocked behind login in the UI.
+        if (configured && !headers) {
+            setLoading(false);
+            setError(null);
+            setPlan('free');
+            setDownloadsUsed(0);
+            setDownloadsRemaining(5);
+            setUltimateUntil(null);
+            setAiEnabled(false);
+            return;
+        }
+
         setLoading(true);
         setError(null);
         try {
@@ -65,7 +78,7 @@ export function useEntitlements(): Entitlements {
         } finally {
             setLoading(false);
         }
-    }, [headers]);
+    }, [configured, headers]);
 
     useEffect(() => {
         void refresh();
