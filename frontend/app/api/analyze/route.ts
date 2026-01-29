@@ -9,6 +9,18 @@ function asRecord(v: unknown): AnyRecord | null {
     return v && typeof v === 'object' && !Array.isArray(v) ? (v as AnyRecord) : null;
 }
 
+function parseBytesFromString(s: string): number | null {
+    const raw = (s || '').trim();
+    if (!raw) return null;
+    const m = raw.match(/^([\d.]+)\s*(B|KB|MB|GB|TB)$/i);
+    if (!m) return null;
+    const n = Number(m[1]);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const unit = m[2].toUpperCase();
+    const pow = unit === 'B' ? 0 : unit === 'KB' ? 1 : unit === 'MB' ? 2 : unit === 'GB' ? 3 : 4;
+    return Math.floor(n * Math.pow(1024, pow));
+}
+
 function formatBytes(n: unknown): string {
     if (typeof n === 'string' && n.trim()) return n.trim();
     if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return 'Unknown';
@@ -26,10 +38,24 @@ function parseHeight(resolution: string): number | undefined {
     const s = (resolution || '').toLowerCase();
     if (s.includes('8k')) return 4320;
     if (s.includes('4k')) return 2160;
+    const m2 = s.match(/\b(\d{3,4})\s*[x×]\s*(\d{3,4})\b/);
+    if (m2) {
+        const h = Number.parseInt(m2[2], 10);
+        return Number.isFinite(h) ? h : undefined;
+    }
     const m = s.match(/(\d{3,4})p/);
     if (m) {
         const v = Number.parseInt(m[1], 10);
         return Number.isFinite(v) ? v : undefined;
+    }
+    return undefined;
+}
+
+function parseNumberMaybe(v: unknown): number | undefined {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string') {
+        const n = Number.parseFloat(v.trim());
+        return Number.isFinite(n) ? n : undefined;
     }
     return undefined;
 }
@@ -100,6 +126,57 @@ function effectivePlan(plan: string, ultimateUntil: string | null): 'free' | 'ul
     return t > Date.now() ? 'ultimate' : 'free';
 }
 
+async function fetchRemoteSizeBytes(url: string, timeoutMs = 2500): Promise<number | null> {
+    const u = (url || '').trim();
+    if (!/^https?:\/\//i.test(u)) return null;
+
+    async function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+        const ac = new AbortController();
+        const t = setTimeout(() => ac.abort(), timeoutMs);
+        try {
+            return await fn(ac.signal);
+        } finally {
+            clearTimeout(t);
+        }
+    }
+
+    // 1) Try HEAD content-length
+    const head = await withTimeout(async (signal) => {
+        try {
+            return await fetch(u, { method: 'HEAD', redirect: 'follow', signal });
+        } catch {
+            return null;
+        }
+    });
+    if (head && (head.ok || head.status === 206)) {
+        const len = head.headers.get('content-length');
+        const n = len ? Number(len) : NaN;
+        if (Number.isFinite(n) && n > 0) return Math.floor(n);
+    }
+
+    // 2) Fallback: Range request, parse content-range total bytes (bytes 0-0/12345)
+    const ranged = await withTimeout(async (signal) => {
+        try {
+            return await fetch(u, { method: 'GET', headers: { Range: 'bytes=0-0' }, redirect: 'follow', signal });
+        } catch {
+            return null;
+        }
+    });
+    if (ranged && (ranged.ok || ranged.status === 206)) {
+        const cr = ranged.headers.get('content-range') || '';
+        const m = cr.match(/\/(\d+)\s*$/);
+        if (m) {
+            const n = Number(m[1]);
+            if (Number.isFinite(n) && n > 0) return Math.floor(n);
+        }
+        const len = ranged.headers.get('content-length');
+        const n = len ? Number(len) : NaN;
+        if (Number.isFinite(n) && n > 0) return Math.floor(n);
+    }
+
+    return null;
+}
+
 export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as { url?: string } | null;
     const url = (body?.url || '').trim();
@@ -167,6 +244,7 @@ export async function POST(req: Request) {
         filesize_str: string;
         note: string;
         height?: number;
+        fps?: number;
         abr?: number;
         vcodec?: string;
         acodec?: string;
@@ -196,11 +274,20 @@ export async function POST(req: Request) {
             const height = typeof f.height === 'number' && Number.isFinite(f.height) ? Math.floor(f.height) : parseHeight(qualityRaw);
             const resolution = isAudio ? 'Audio' : height ? `${height}p` : qualityRaw || 'Standard';
             const note = String(f.note || f.format_note || f.type || '').trim();
-            const abr = typeof f.abr === 'number' && Number.isFinite(f.abr) ? f.abr : typeof f.bitrate === 'number' ? f.bitrate : undefined;
+            const fpsRaw = parseNumberMaybe(f.fps ?? f.frameRate ?? f.framerate ?? f.frame_rate);
+            const fps = typeof fpsRaw === 'number' && Number.isFinite(fpsRaw) && fpsRaw > 0 ? fpsRaw : undefined;
+
+            let abr: number | undefined;
+            if (isAudio) {
+                const abrRaw = parseNumberMaybe(f.abr ?? f.audioBitrate ?? f.audio_bitrate ?? f.bitrate ?? f.kbps);
+                if (typeof abrRaw === 'number' && abrRaw > 0) {
+                    abr = abrRaw > 1000 ? abrRaw / 1000 : abrRaw;
+                }
+            }
             const vcodec = typeof f.vcodec === 'string' ? f.vcodec : typeof f.videoCodec === 'string' ? f.videoCodec : undefined;
             const acodec = typeof f.acodec === 'string' ? f.acodec : typeof f.audioCodec === 'string' ? f.audioCodec : undefined;
             const fmtId = String(f.format_id || f.id || f.itag || `${ext}-${i}`);
-            const filesizeStr = formatBytes(f.formattedSize ?? f.size ?? f.filesize ?? f.fileSize);
+            const filesizeStr = formatBytes(f.formattedSize ?? f.size ?? f.filesize ?? f.fileSize ?? f.filesize_approx ?? f.contentLength);
 
             const out = {
                 format_id: fmtId,
@@ -209,6 +296,7 @@ export async function POST(req: Request) {
                 filesize_str: filesizeStr,
                 note,
                 height,
+                fps,
                 abr,
                 vcodec,
                 acodec,
@@ -220,6 +308,31 @@ export async function POST(req: Request) {
 
     video.sort((a, b) => (b.height || 0) - (a.height || 0));
     audio.sort((a, b) => (b.abr || 0) - (a.abr || 0));
+
+    // Best-effort: fill missing sizes for a small subset to improve UX without slowing too much.
+    async function fillMissingSizes(list: Array<{ filesize_str: string; url?: string }>, limit: number) {
+        const targets = list
+            .slice(0, limit)
+            .map((it, idx) => ({ it, idx }))
+            .filter(({ it }) => Boolean(it.url) && (!it.filesize_str || it.filesize_str === 'Unknown' || parseBytesFromString(it.filesize_str) === null));
+
+        const concurrency = 4;
+        let cursor = 0;
+        async function worker() {
+            while (cursor < targets.length) {
+                const idx = cursor++;
+                const it = targets[idx]?.it;
+                if (!it?.url) continue;
+                const size = await fetchRemoteSizeBytes(it.url);
+                if (typeof size === 'number' && size > 0) {
+                    it.filesize_str = formatBytes(size);
+                }
+            }
+        }
+        await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, () => worker()));
+    }
+
+    await Promise.all([fillMissingSizes(video, 10), fillMissingSizes(audio, 8)]);
 
     // Optional AI analysis (best-effort; never blocks downloads).
     const aiParam = new URL(req.url).searchParams.get('ai') || 'true';
@@ -303,4 +416,3 @@ Rules:
         audio_formats: audio,
     });
 }
-

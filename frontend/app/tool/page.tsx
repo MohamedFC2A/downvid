@@ -135,6 +135,81 @@ export default function ToolPage() {
         }
     }
 
+    function parseBytes(str: string): number {
+        const raw = (str || "").trim();
+        const m = raw.match(/^([\d.]+)\s*(B|KB|MB|GB|TB)$/i);
+        if (!m) return 0;
+        const n = Number(m[1]);
+        if (!Number.isFinite(n) || n <= 0) return 0;
+        const unit = m[2].toUpperCase();
+        const pow = unit === "B" ? 0 : unit === "KB" ? 1 : unit === "MB" ? 2 : unit === "GB" ? 3 : 4;
+        return Math.floor(n * Math.pow(1024, pow));
+    }
+
+    function getHeight(fmt: VideoFormat): number {
+        if (typeof fmt.height === "number" && fmt.height > 0) return fmt.height;
+        const m = (fmt.resolution || "").match(/(\d{3,4})p/i);
+        if (m) {
+            const v = Number.parseInt(m[1], 10);
+            return Number.isFinite(v) ? v : 0;
+        }
+        if (/8k/i.test(fmt.resolution || "")) return 4320;
+        if (/4k/i.test(fmt.resolution || "")) return 2160;
+        return 0;
+    }
+
+    function hasDownloadLink(fmt: VideoFormat | null | undefined): boolean {
+        return Boolean(fmt?.url && String(fmt.url).startsWith("http"));
+    }
+
+    function hasAudio(fmt: VideoFormat): boolean {
+        const a = (fmt.acodec || "").toLowerCase();
+        return Boolean(a && a !== "none");
+    }
+
+    function pickDefaultVideoFormatId(list: VideoFormat[]): string | null {
+        const candidates = list.filter((f) => hasDownloadLink(f));
+        if (candidates.length === 0) return null;
+
+        const preferredHeights = [1080, 720, 2160, 480, 360, 240];
+        for (const h of preferredHeights) {
+            const same = candidates.filter((f) => getHeight(f) === h);
+            if (same.length === 0) continue;
+            same.sort((a, b) => {
+                const audio = Number(hasAudio(b)) - Number(hasAudio(a));
+                if (audio !== 0) return audio;
+                const mp4 = Number((b.extension || "").toLowerCase() === "mp4") - Number((a.extension || "").toLowerCase() === "mp4");
+                if (mp4 !== 0) return mp4;
+                const fps = (b.fps || 0) - (a.fps || 0);
+                if (fps !== 0) return fps;
+                return parseBytes(b.filesize_str || "") - parseBytes(a.filesize_str || "");
+            });
+            return same[0]!.format_id;
+        }
+
+        candidates.sort((a, b) => {
+            const audio = Number(hasAudio(b)) - Number(hasAudio(a));
+            if (audio !== 0) return audio;
+            const h = getHeight(b) - getHeight(a);
+            if (h !== 0) return h;
+            const mp4 = Number((b.extension || "").toLowerCase() === "mp4") - Number((a.extension || "").toLowerCase() === "mp4");
+            if (mp4 !== 0) return mp4;
+            return parseBytes(b.filesize_str || "") - parseBytes(a.filesize_str || "");
+        });
+        return candidates[0]!.format_id;
+    }
+
+    function pickDefaultAudioFormatId(list: VideoFormat[]): string | null {
+        const candidates = list.filter((f) => hasDownloadLink(f));
+        if (candidates.length === 0) return null;
+        candidates.sort((a, b) => {
+            const abr = (b.abr || 0) - (a.abr || 0);
+            if (abr !== 0) return abr;
+            return parseBytes(b.filesize_str || "") - parseBytes(a.filesize_str || "");
+        });
+        return candidates[0]!.format_id;
+    }
+
     async function onAnalyze() {
         const u = url.trim();
         if (!u || !isUrlValid) return;
@@ -161,8 +236,8 @@ export default function ToolPage() {
             setAvailableFormats(data.available_formats || []);
             setAudioFormats(data.audio_formats || []);
 
-            const nextVideo = Array.isArray(data.available_formats) && data.available_formats.length > 0 ? data.available_formats[0]?.format_id : null;
-            const nextAudio = Array.isArray(data.audio_formats) && data.audio_formats.length > 0 ? data.audio_formats[0]?.format_id : null;
+            const nextVideo = Array.isArray(data.available_formats) ? pickDefaultVideoFormatId(data.available_formats) : null;
+            const nextAudio = Array.isArray(data.audio_formats) ? pickDefaultAudioFormatId(data.audio_formats) : null;
             const next = downloadMode === "audio" ? nextAudio : nextVideo;
             if (next) {
                 setSelectedFormatId(next);

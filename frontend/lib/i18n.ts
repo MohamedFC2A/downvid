@@ -326,13 +326,18 @@ const EN: Dict = {
     "tool.clear": "Clear",
 
     "quality.notAvailable": "Not available",
+    "quality.noLink": "Missing download link",
     "quality.more": "More details",
     "quality.less": "Hide details",
+    "quality.selected": "Selected",
+    "quality.selectedNone": "No quality selected",
     "quality.size": "Size",
     "quality.codec": "Codec",
     "quality.fps": "FPS",
+    "quality.kbps": "kbps",
     "quality.note": "Notes",
     "quality.ext": "Ext",
+    "quality.noAudio": "No audio",
 };
 
 const AR: Dict = {
@@ -659,13 +664,18 @@ const AR: Dict = {
     "tool.clear": "مسح",
 
     "quality.notAvailable": "مش متاح",
+    "quality.noLink": "الرابط غير متاح",
     "quality.more": "تفاصيل أكثر",
     "quality.less": "إخفاء التفاصيل",
+    "quality.selected": "المحدد",
+    "quality.selectedNone": "لم يتم اختيار جودة",
     "quality.size": "الحجم",
     "quality.codec": "الكودك",
     "quality.fps": "FPS",
+    "quality.kbps": "kbps",
     "quality.note": "ملاحظات",
     "quality.ext": "الصيغة",
+    "quality.noAudio": "بدون صوت",
 };
 
 const DICTS: Record<AppLanguage, Dict> = { en: EN, ar: AR };

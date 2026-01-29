@@ -38,8 +38,43 @@ export function QualitySelector({
     onSelect,
     onModeChange,
 }: QualitySelectorProps) {
-    const formats = mode === 'video' ? availableFormats : audioFormats;
+    function parseBytes(str: string): number | null {
+        const raw = (str || '').trim();
+        if (!raw) return null;
+        const m = raw.match(/^([\d.]+)\s*(B|KB|MB|GB|TB)$/i);
+        if (!m) return null;
+        const n = Number(m[1]);
+        if (!Number.isFinite(n) || n <= 0) return null;
+        const unit = m[2].toUpperCase();
+        const pow = unit === 'B' ? 0 : unit === 'KB' ? 1 : unit === 'MB' ? 2 : unit === 'GB' ? 3 : 4;
+        return Math.floor(n * Math.pow(1024, pow));
+    }
+
+    const formats = useMemo(() => {
+        const list = mode === 'video' ? [...availableFormats] : [...audioFormats];
+        if (mode === 'audio') {
+            list.sort((a, b) => {
+                const abr = (b.abr || 0) - (a.abr || 0);
+                if (abr !== 0) return abr;
+                return (parseBytes(b.filesize_str || '') || 0) - (parseBytes(a.filesize_str || '') || 0);
+            });
+            return list;
+        }
+        list.sort((a, b) => {
+            const h = (b.height || 0) - (a.height || 0);
+            if (h !== 0) return h;
+            const fps = (b.fps || 0) - (a.fps || 0);
+            if (fps !== 0) return fps;
+            return (parseBytes(b.filesize_str || '') || 0) - (parseBytes(a.filesize_str || '') || 0);
+        });
+        return list;
+    }, [availableFormats, audioFormats, mode]);
     const [showDetails, setShowDetails] = useState(false);
+
+    const selectedFmt = useMemo(() => {
+        if (!selectedId) return null;
+        return formats.find((f) => f.format_id === selectedId) || null;
+    }, [formats, selectedId]);
 
     const handleSelect = (id: string) => {
         onSelect(id, mode);
@@ -65,7 +100,21 @@ export function QualitySelector({
         for (const fmt of formats) {
             const h = getHeight(fmt);
             if (!h) continue;
-            if (!map.has(h)) map.set(h, fmt);
+            const cur = map.get(h);
+            if (!cur) {
+                map.set(h, fmt);
+                continue;
+            }
+            // Prefer: higher fps, larger size, mp4 container.
+            const fpsA = typeof fmt.fps === 'number' ? fmt.fps : 0;
+            const fpsB = typeof cur.fps === 'number' ? cur.fps : 0;
+            const sizeA = parseBytes(fmt.filesize_str || '') || 0;
+            const sizeB = parseBytes(cur.filesize_str || '') || 0;
+            const mp4A = (fmt.extension || '').toLowerCase() === 'mp4' ? 1 : 0;
+            const mp4B = (cur.extension || '').toLowerCase() === 'mp4' ? 1 : 0;
+            const scoreA = mp4A * 1_000_000_000 + fpsA * 1_000_000 + sizeA;
+            const scoreB = mp4B * 1_000_000_000 + fpsB * 1_000_000 + sizeB;
+            if (scoreA > scoreB) map.set(h, fmt);
         }
         return map;
     }, [formats, mode]);
@@ -100,6 +149,37 @@ export function QualitySelector({
         return parts.join(' / ') || '—';
     };
 
+    const hasDownloadLink = (fmt: VideoFormat | null | undefined) => Boolean(fmt?.url && String(fmt.url).startsWith('http'));
+
+    const noAudio = (fmt: VideoFormat) => {
+        if (mode !== 'video') return false;
+        const a = (fmt.acodec || '').toLowerCase();
+        return !a || a === 'none';
+    };
+
+    const noteLine = (fmt: VideoFormat) => {
+        const parts = [codecShort(fmt)];
+        if (fmt.note) parts.push(fmt.note);
+        if (noAudio(fmt)) parts.push(t(language, 'quality.noAudio'));
+        return parts.filter(Boolean).join(' • ');
+    };
+
+    const selectedSummary = useMemo(() => {
+        if (!selectedFmt) return t(language, 'quality.selectedNone');
+        const size = selectedFmt.filesize_str || 'Unknown';
+        const ext = selectedFmt.extension || '—';
+        const speed =
+            mode === 'audio'
+                ? typeof selectedFmt.abr === 'number' && selectedFmt.abr > 0
+                    ? `${Math.round(selectedFmt.abr)}kbps`
+                    : null
+                : typeof selectedFmt.fps === 'number' && selectedFmt.fps > 0
+                    ? `${Math.round(selectedFmt.fps)}fps`
+                    : null;
+        const parts = [selectedFmt.resolution, speed, size, ext].filter(Boolean);
+        return `${t(language, 'quality.selected')}: ${parts.join(' • ')}`;
+    }, [language, mode, selectedFmt]);
+
     return (
         <div className="w-full bg-[var(--deep)] border border-[var(--panel-border)] rounded-xl p-3 space-y-3">
             {/* Mode Switcher */}
@@ -129,7 +209,7 @@ export function QualitySelector({
                 <div className="flex gap-2 overflow-x-auto pr-1 pb-1">
                     {targetHeights.map((h) => {
                         const fmt = byHeight.get(h) || null;
-                        const disabled = !fmt;
+                        const disabled = !fmt || !hasDownloadLink(fmt);
                         const selected = fmt?.format_id && selectedId === fmt.format_id;
                         return (
                             <button
@@ -144,7 +224,16 @@ export function QualitySelector({
                                             ? 'border-[var(--panel-border)] bg-[var(--panel)] text-[var(--foreground)] opacity-45 cursor-not-allowed'
                                             : 'border-[var(--panel-border)] bg-[var(--panel)] text-[var(--foreground)] opacity-80 hover:opacity-100'
                                 }`}
-                                title={disabled ? t(language, 'quality.notAvailable') : `${fmt?.filesize_str || ''} ${fmt?.extension || ''}`.trim()}
+                                title={
+                                    disabled
+                                        ? fmt
+                                            ? t(language, 'quality.noLink')
+                                            : t(language, 'quality.notAvailable')
+                                        : [fmt?.filesize_str || '', fmt?.extension || '', noAudio(fmt as VideoFormat) ? t(language, 'quality.noAudio') : '']
+                                            .filter(Boolean)
+                                            .join(' ')
+                                            .trim()
+                                }
                             >
                                 <span>{labelForHeight(h)}</span>
                                 <span className="ml-2 font-mono opacity-70">{disabled ? '—' : (fmt?.filesize_str || 'N/A')}</span>
@@ -156,8 +245,8 @@ export function QualitySelector({
 
             {/* Details toggle */}
             <div className="flex items-center justify-between">
-                <div className="text-[11px] text-[var(--foreground)] opacity-60 font-mono">
-                    {selectedId ? `ID: ${selectedId}` : ''}
+                <div className="text-[11px] text-[var(--foreground)] opacity-65 font-mono" title={selectedFmt ? noteLine(selectedFmt) : ''}>
+                    {selectedSummary}
                 </div>
                 <button
                     type="button"
@@ -193,30 +282,43 @@ export function QualitySelector({
                                             <div className="col-span-4">{t(language, 'tool.quality')}</div>
                                             <div className="col-span-2">{t(language, 'quality.ext')}</div>
                                             <div className="col-span-2">{t(language, 'quality.size')}</div>
-                                            <div className="col-span-1">{t(language, 'quality.fps')}</div>
+                                            <div className="col-span-1">{mode === 'audio' ? t(language, 'quality.kbps') : t(language, 'quality.fps')}</div>
                                             <div className="col-span-3">{t(language, 'quality.codec')}</div>
                                         </div>
                                         <div className="max-h-[260px] overflow-y-auto">
                                             {(mode === 'video' ? [...formats] : [...formats]).slice(0, 80).map((fmt) => {
                                                 const selected = fmt.format_id === selectedId;
-                                                const fps = typeof fmt.fps === 'number' && fmt.fps > 0 ? `${Math.round(fmt.fps)}` : '—';
+                                                const disabled = !hasDownloadLink(fmt);
+                                                const fpsOrKbps =
+                                                    mode === 'audio'
+                                                        ? typeof fmt.abr === 'number' && fmt.abr > 0
+                                                            ? `${Math.round(fmt.abr)}`
+                                                            : '—'
+                                                        : typeof fmt.fps === 'number' && fmt.fps > 0
+                                                            ? `${Math.round(fmt.fps)}`
+                                                            : '—';
                                                 return (
                                                     <button
                                                         key={`row-${fmt.format_id}`}
                                                         type="button"
-                                                        onClick={() => handleSelect(fmt.format_id)}
+                                                        disabled={disabled}
+                                                        onClick={() => hasDownloadLink(fmt) && handleSelect(fmt.format_id)}
                                                         className={`w-full grid grid-cols-12 gap-2 px-3 py-2 text-left text-xs border-t border-[var(--panel-border)] ${
-                                                            selected ? 'bg-[var(--accent-soft)]' : 'bg-[var(--deep)] hover:bg-[var(--panel)]'
+                                                            disabled
+                                                                ? 'bg-[var(--deep)] opacity-45 cursor-not-allowed'
+                                                                : selected
+                                                                    ? 'bg-[var(--accent-soft)]'
+                                                                    : 'bg-[var(--deep)] hover:bg-[var(--panel)]'
                                                         }`}
-                                                        title={fmt.note || ''}
+                                                        title={disabled ? t(language, 'quality.noLink') : noteLine(fmt)}
                                                     >
                                                         <div className="col-span-4 font-semibold text-[var(--foreground)]">
                                                             {fmt.resolution}
-                                                            {fmt.note ? <span className="ml-2 font-normal opacity-60">• {fmt.note}</span> : null}
+                                                            {noAudio(fmt) ? <span className="ml-2 font-normal opacity-60">• {t(language, 'quality.noAudio')}</span> : null}
                                                         </div>
                                                         <div className="col-span-2 font-mono text-[var(--foreground)] opacity-80">{fmt.extension || '—'}</div>
                                                         <div className="col-span-2 font-mono text-[var(--foreground)] opacity-80">{fmt.filesize_str || 'Unknown'}</div>
-                                                        <div className="col-span-1 font-mono text-[var(--foreground)] opacity-70">{fps}</div>
+                                                        <div className="col-span-1 font-mono text-[var(--foreground)] opacity-70">{fpsOrKbps}</div>
                                                         <div className="col-span-3 font-mono text-[var(--foreground)] opacity-70">{codecShort(fmt)}</div>
                                                     </button>
                                                 );
@@ -227,22 +329,34 @@ export function QualitySelector({
                                     <div className="space-y-2">
                                         {listFormats.slice(0, 10).map((fmt) => {
                                             const selected = fmt.format_id === selectedId;
-                                            const fps = typeof fmt.fps === 'number' && fmt.fps > 0 ? `${Math.round(fmt.fps)}fps` : '';
+                                            const disabled = !hasDownloadLink(fmt);
+                                            const fpsOrKbps =
+                                                mode === 'audio'
+                                                    ? typeof fmt.abr === 'number' && fmt.abr > 0
+                                                        ? `${Math.round(fmt.abr)}kbps`
+                                                        : ''
+                                                    : typeof fmt.fps === 'number' && fmt.fps > 0
+                                                        ? `${Math.round(fmt.fps)}fps`
+                                                        : '';
                                             return (
                                                 <button
                                                     key={`mini-${fmt.format_id}`}
                                                     type="button"
-                                                    onClick={() => handleSelect(fmt.format_id)}
+                                                    disabled={disabled}
+                                                    onClick={() => hasDownloadLink(fmt) && handleSelect(fmt.format_id)}
                                                     className={`w-full rounded-lg border px-3 py-2 text-left transition-all ${
-                                                        selected
+                                                        disabled
+                                                            ? 'border-[var(--panel-border)] bg-[var(--panel)] opacity-45 cursor-not-allowed'
+                                                            : selected
                                                             ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
                                                             : 'border-[var(--panel-border)] bg-[var(--panel)] hover:opacity-95'
                                                     }`}
+                                                    title={disabled ? t(language, 'quality.noLink') : noteLine(fmt)}
                                                 >
                                                     <div className="flex items-center justify-between gap-3">
                                                         <div className="text-sm font-semibold text-[var(--foreground)]">
                                                             {fmt.resolution}
-                                                            {fps ? <span className="ml-2 text-[11px] font-mono opacity-60">{fps}</span> : null}
+                                                            {fpsOrKbps ? <span className="ml-2 text-[11px] font-mono opacity-60">{fpsOrKbps}</span> : null}
                                                         </div>
                                                         <div className="text-[11px] font-mono text-[var(--foreground)] opacity-70">
                                                             {fmt.filesize_str || 'Unknown'} • {fmt.extension || '—'}
@@ -250,7 +364,7 @@ export function QualitySelector({
                                                     </div>
                                                     {(fmt.vcodec || fmt.acodec || fmt.note) && (
                                                         <div className="mt-1 text-[11px] font-mono text-[var(--foreground)] opacity-60">
-                                                            {[codecShort(fmt), fmt.note].filter(Boolean).join(' • ')}
+                                                            {noteLine(fmt)}
                                                         </div>
                                                     )}
                                                 </button>
