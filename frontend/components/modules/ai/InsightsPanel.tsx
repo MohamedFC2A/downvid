@@ -24,7 +24,7 @@ export function InsightsPanel({ data, isLoading }: InsightsProps) {
 
                     <div className="space-y-3 text-left">
                         <div className="flex items-center gap-2 text-green-400 font-mono text-sm">
-                            <span className="h-2 w-2 rounded-full bg-green-400 shadow-[0_0_12px_rgba(34,197,94,0.6)]" />
+                            <span className="h-2 w-2 rounded-full bg-green-400" />
                             <span className="tracking-widest">ANALYZING METADATA</span>
                             <span className="animate-pulse">...</span>
                         </div>

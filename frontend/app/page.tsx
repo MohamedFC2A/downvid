@@ -6,8 +6,6 @@ export default function Home() {
   return (
     <main className="relative min-h-screen w-full overflow-hidden bg-ember">
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-20" />
-      <div className="pointer-events-none absolute -top-32 left-[-120px] h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle,_rgba(255,180,87,0.45),_transparent_65%)] blur-2xl animate-float-slow" />
-      <div className="pointer-events-none absolute bottom-[-200px] right-[-120px] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle,_rgba(243,91,74,0.4),_transparent_65%)] blur-3xl animate-float-slow" />
 
       <section className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-16 px-6 pb-20 pt-14 md:pt-20">
         <header className="flex items-center justify-between">
@@ -38,7 +36,7 @@ export default function Home() {
             </p>
             <div className="flex flex-col gap-4 sm:flex-row">
               <Link href="/tool">
-                <Button className="h-14 px-10 text-base rounded-full shadow-[0_0_50px_-18px_rgba(255,180,87,0.8)] hover:shadow-[0_0_80px_-18px_rgba(255,122,89,0.8)] transition-shadow duration-500">
+                <Button className="h-14 px-10 text-base rounded-full">
                   Launch DOWNVID
                 </Button>
               </Link>

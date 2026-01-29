@@ -22,8 +22,7 @@ export function ProgressBar({ progress, status, speed, eta }: ProgressBarProps) 
                     animate={{ width: `${progress}%` }}
                     transition={{ type: "spring", stiffness: 100, damping: 20 }}
                 >
-                    {/* Glow effect at the tip */}
-                    <div className="absolute right-0 top-0 bottom-0 w-2 bg-white shadow-[0_0_10px_2px_rgba(255,255,255,0.8)]" />
+                    <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-white/60" />
                 </motion.div>
             </div>
             <div className="text-right text-zinc-500 pt-1">{progress.toFixed(1)}%</div>

@@ -152,15 +152,15 @@ export default function ToolPage() {
     }
 
     const platformAccent = platformDetected === 'YouTube'
-        ? 'border-red-500/40 shadow-[0_0_20px_rgba(239,68,68,0.18)] focus-visible:ring-red-400/50'
+        ? 'border-red-500/40'
         : platformDetected === 'TikTok'
-            ? 'border-cyan-400/40 shadow-[0_0_20px_rgba(34,211,238,0.18)] focus-visible:ring-cyan-400/50'
+            ? 'border-cyan-400/40'
             : platformDetected === 'Instagram'
-                ? 'border-pink-400/40 shadow-[0_0_20px_rgba(244,114,182,0.18)] focus-visible:ring-pink-400/50'
+                ? 'border-pink-400/40'
                 : platformDetected === 'Facebook'
-                    ? 'border-blue-400/40 shadow-[0_0_20px_rgba(96,165,250,0.18)] focus-visible:ring-blue-400/50'
+                    ? 'border-blue-400/40'
                     : platformDetected === 'Twitter'
-                        ? 'border-sky-400/40 shadow-[0_0_20px_rgba(56,189,248,0.18)] focus-visible:ring-sky-400/50'
+                        ? 'border-sky-400/40'
                         : '';
 
     const handleFocus = async () => {
@@ -177,11 +177,7 @@ export default function ToolPage() {
 
     return (
         <main className="min-h-screen pt-28 pb-14 px-4 flex flex-col items-center relative z-10">
-            {/* Liquid glass backdrop */}
-            <div className="pointer-events-none fixed inset-0 -z-10">
-                <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full liquid-orb opacity-40" />
-                <div className="absolute bottom-[-220px] right-[-180px] w-[700px] h-[700px] rounded-full liquid-orb opacity-30" />
-            </div>
+            {/* Keep background clean: no glow blobs */}
 
             <div className="w-full max-w-6xl space-y-10">
                 <div className="text-center space-y-4 flex flex-col items-center">
@@ -223,7 +219,7 @@ export default function ToolPage() {
                                     {/* Platform Icon Indicator */}
                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none transition-colors duration-300">
                                         {platformDetected ? (
-                                            <span className="text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]">
+                                            <span className="text-cyan-400">
                                                 {/* Simple SVG Icons based on platform could go here, for now using initial char in a styled box */}
                                                 <div className="w-6 h-6 flex items-center justify-center font-bold font-mono border border-cyan-400 rounded bg-cyan-900/40">
                                                     {platformDetected[0]}
@@ -236,7 +232,7 @@ export default function ToolPage() {
 
                                     {/* Verified Badge */}
                                     {platformDetected && (
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-green-400 bg-green-950/30 px-2 py-1 rounded-full border border-green-500/20 animate-in fade-in zoom-in duration-300">
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-green-400 bg-[var(--panel)] px-2 py-1 rounded-full border border-[var(--panel-border)]">
                                             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" /></svg>
                                             <span className="text-[10px] uppercase font-bold tracking-wider">{t(lang, "tool.verified")}</span>
                                         </div>
@@ -363,7 +359,7 @@ export default function ToolPage() {
                                                 </div>
                                                 <div className="mt-3 h-1.5 w-full bg-white/10 rounded-full overflow-hidden border border-white/10">
                                                     <div
-                                                        className="h-full bg-white/90 shadow-[0_0_18px_rgba(255,255,255,0.35)]"
+                                                        className="h-full bg-[var(--foreground)] opacity-90"
                                                         style={{ width: `${Math.max(0, Math.min(100, status.percent || 0))}%` }}
                                                     />
                                                 </div>

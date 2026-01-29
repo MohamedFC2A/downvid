@@ -89,7 +89,7 @@ export function QualitySelector({
                                     key={fmt.format_id}
                                     onClick={() => handleSelect(fmt.format_id)}
                                     className={`relative group flex flex-col justify-between p-4 rounded-xl text-left transition-all duration-300 border backdrop-blur-md ${selectedId === fmt.format_id
-                                        ? 'bg-[var(--accent-soft)] border-[var(--accent)] shadow-[0_0_20px_rgba(56,189,248,0.18)] scale-[1.02]'
+                                        ? 'bg-[var(--accent-soft)] border-[var(--accent)] scale-[1.02]'
                                         : 'bg-[var(--panel)] border-[var(--panel-border)] hover:opacity-90'
                                         }`}
                                 >
@@ -105,7 +105,7 @@ export function QualitySelector({
                                             )}
                                         </div>
                                         {selectedId === fmt.format_id && (
-                                            <div className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_cyan]"></div>
+                                            <div className="h-2 w-2 rounded-full bg-[var(--accent)]"></div>
                                         )}
                                     </div>
 

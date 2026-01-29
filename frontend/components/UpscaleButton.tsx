@@ -164,7 +164,7 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
                 <Button
                     onClick={startUpscale}
                     disabled={disabled || !videoUrl || status === 'processing' || status === 'starting'}
-                    className="h-10 px-5 text-sm font-semibold bg-gradient-to-r from-amber-300 via-amber-200 to-yellow-100 text-black shadow-[0_0_30px_rgba(251,191,36,0.25)]"
+                    className="h-10 px-5 text-sm font-semibold bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 border border-[var(--panel-border)]"
                 >
                     {t(lang, 'upscale.cta')}
                 </Button>
@@ -202,7 +202,7 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
                         link.click();
                         link.remove();
                     }}
-                    className="w-full rounded-xl border border-amber-300/60 bg-gradient-to-r from-amber-300/30 via-yellow-200/30 to-amber-300/30 px-4 py-3 text-sm font-semibold text-amber-100 shadow-[0_0_35px_rgba(251,191,36,0.4)]"
+                    className="w-full rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] px-4 py-3 text-sm font-semibold text-[var(--foreground)] hover:opacity-90"
                 >
                     {t(lang, 'upscale.download4k')}
                 </button>

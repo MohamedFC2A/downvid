@@ -28,8 +28,6 @@ export function SettingsPage() {
     return (
         <main className="min-h-screen pt-28 pb-20 px-6 relative overflow-hidden">
             <div className="pointer-events-none absolute inset-0">
-                <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,_rgba(56,189,248,0.2),_transparent_70%)] blur-3xl" />
-                <div className="absolute bottom-[-200px] right-[-120px] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle,_rgba(16,185,129,0.16),_transparent_70%)] blur-3xl" />
                 <div className="absolute inset-0 bg-[linear-gradient(115deg,_rgba(255,255,255,0.04)_0%,_transparent_55%)]" />
             </div>
 
@@ -65,7 +63,7 @@ export function SettingsPage() {
                                     onClick={() => updateSettings({ theme: option.id })}
                                     className={`w-full rounded-2xl border px-4 py-4 text-left transition-all ${
                                         settings.theme === option.id
-                                            ? 'border-[var(--accent)] bg-[var(--accent-soft)] shadow-[0_0_25px_rgba(56,189,248,0.2)]'
+                                            ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
                                             : 'border-[var(--panel-border)] bg-[var(--deep)] hover:opacity-90'
                                     }`}
                                 >
@@ -88,7 +86,7 @@ export function SettingsPage() {
                                         onClick={() => updateSettings({ language: option.id })}
                                         className={`w-full rounded-2xl border px-4 py-4 text-left transition-all ${
                                             settings.language === option.id
-                                                ? 'border-[var(--accent)] bg-[var(--accent-soft)] shadow-[0_0_25px_rgba(56,189,248,0.2)]'
+                                                ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
                                                 : 'border-[var(--panel-border)] bg-[var(--deep)] hover:opacity-90'
                                         }`}
                                     >
@@ -178,7 +176,7 @@ export function SettingsPage() {
                                     onClick={() => updateSettings({ defaultUpscaleModel: option.id })}
                                     className={`w-full rounded-2xl border px-4 py-4 text-left transition-all ${
                                         settings.defaultUpscaleModel === option.id
-                                            ? 'border-[var(--ember)] bg-[var(--accent-soft)] shadow-[0_0_25px_rgba(251,191,36,0.22)]'
+                                            ? 'border-[var(--ember)] bg-[var(--accent-soft)]'
                                             : 'border-[var(--panel-border)] bg-[var(--deep)] hover:opacity-90'
                                     }`}
                                 >
@@ -225,7 +223,7 @@ function ToggleRow({
             >
                 <span
                     className={`inline-flex h-5 w-5 transform items-center justify-center rounded-full bg-[var(--foreground)] shadow transition-all ${
-                        enabled ? 'translate-x-5 shadow-[0_0_12px_rgba(56,189,248,0.4)]' : 'translate-x-1'
+                        enabled ? 'translate-x-5' : 'translate-x-1'
                     }`}
                 />
             </button>

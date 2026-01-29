@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Montserrat:wght@900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
+@import "tailwindcss";
 
 @theme {
   --font-sans: "Space Grotesk", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -97,10 +97,7 @@ body {
 }
 
 @utility bg-ember {
-  background: radial-gradient(1200px circle at 20% 10%, rgba(255, 180, 87, 0.25), transparent 60%),
-              radial-gradient(900px circle at 85% 20%, rgba(243, 91, 74, 0.28), transparent 55%),
-              radial-gradient(700px circle at 60% 80%, rgba(255, 122, 89, 0.18), transparent 55%),
-              linear-gradient(120deg, #07080c 0%, #0d1018 45%, #0c0f18 100%);
+  background: linear-gradient(120deg, #07080c 0%, #0d1018 45%, #0c0f18 100%);
 }
 
 @utility bg-noise {
