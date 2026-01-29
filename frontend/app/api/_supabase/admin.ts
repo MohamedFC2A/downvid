@@ -6,7 +6,9 @@ export type AdminEnv = {
 };
 
 export function getAdminEnv(): AdminEnv | null {
-    const url = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
+    // Prefer server-only env, but allow falling back to the public URL
+    // to reduce configuration footguns on Vercel.
+    const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/+$/, '');
     const serviceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
     if (!url || !serviceRoleKey) return null;
     return { url, serviceRoleKey };
@@ -39,4 +41,3 @@ export async function getUserIdFromBearer(env: AdminEnv, bearerToken: string): P
         return null;
     }
 }
-

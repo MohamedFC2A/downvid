@@ -13,8 +13,21 @@ function effectivePlan(plan: string, ultimateUntil: string | null): 'free' | 'ul
 export async function GET(req: Request) {
     const admin = getSupabaseAdmin();
     if (!admin) {
+        const hasUrl = Boolean((process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim());
+        const hasService = Boolean((process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim());
         return NextResponse.json(
-            { supabase_enabled: false, plan: 'free', downloads_used: 0, downloads_remaining: 5, ai_enabled: false, ultimate_until: null },
+            {
+                supabase_enabled: false,
+                plan: 'free',
+                downloads_used: 0,
+                downloads_remaining: 5,
+                ai_enabled: false,
+                ultimate_until: null,
+                missing: {
+                    SUPABASE_URL: !hasUrl,
+                    SUPABASE_SERVICE_ROLE_KEY: !hasService,
+                },
+            },
             { status: 200 }
         );
     }
@@ -52,4 +65,3 @@ export async function GET(req: Request) {
         ultimate_until: (data?.ultimate_until as string | null) || null,
     });
 }
-

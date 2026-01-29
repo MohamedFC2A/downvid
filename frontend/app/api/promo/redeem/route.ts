@@ -13,8 +13,16 @@ function effectivePlan(plan: string, ultimateUntil: string | null): 'free' | 'ul
 export async function POST(req: Request) {
     const admin = getSupabaseAdmin();
     if (!admin) {
+        const hasUrl = Boolean((process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim());
+        const hasService = Boolean((process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim());
         return NextResponse.json(
-            { detail: 'Supabase is not configured on the server (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)' },
+            {
+                detail: 'Supabase is not configured on the server (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)',
+                missing: {
+                    SUPABASE_URL: !hasUrl,
+                    SUPABASE_SERVICE_ROLE_KEY: !hasService,
+                },
+            },
             { status: 503 }
         );
     }
@@ -62,4 +70,3 @@ export async function POST(req: Request) {
         downloads_remaining: downloadsRemaining,
     });
 }
-
