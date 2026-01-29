@@ -186,7 +186,6 @@ export default function ToolPage() {
                                     if (text) setUrl(text.trim());
                                 }}
                             >
-                            >
                                 <div className="relative group">
                                     <Input
                                         value={url}
