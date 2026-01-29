@@ -6,7 +6,7 @@ from pathlib import Path
 from app.api.websocket import manager
 from app.core.config import settings
 from app.core.admin_log import admin_log
-from app.core.auth import get_user_id_from_authorization, require_user_id, require_ultimate
+from app.core.auth import get_user_id_from_authorization, require_user_id, require_ultimate, resolve_user_id
 from app.services.ytdlp_service import YtDlpService, VideoFormat
 from app.services.deepseek_service import deepseek_service
 from app.services.replicate_upscale_service import MODEL_MAP, replicate_upscale_service
@@ -134,7 +134,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     access_token = websocket.query_params.get("access_token")
     user_id = None
     if access_token:
-        user_id = get_user_id_from_authorization(f"Bearer {access_token}")
+        user_id = await resolve_user_id(f"Bearer {access_token}")
     
     await manager.connect(websocket, client_id)
     logger.info(f"WebSocket connected: {client_id}")
@@ -218,7 +218,7 @@ async def analyze_video(
 ):
     try:
         if ai and settings.SUPABASE_ENABLED:
-            user_id = require_user_id(authorization)
+            user_id = await require_user_id(authorization)
             profile = await supabase_service.get_or_create_profile(user_id)
             require_ultimate(profile.ai_enabled)
 
@@ -324,7 +324,7 @@ async def summarize_video(
         }
 
     if settings.SUPABASE_ENABLED:
-        user_id = require_user_id(authorization)
+        user_id = await require_user_id(authorization)
         profile = await supabase_service.get_or_create_profile(user_id)
         require_ultimate(profile.ai_enabled)
 
@@ -380,7 +380,7 @@ async def diagnostics():
 @router.post("/ai/diagnose")
 async def ai_diagnose(req: DiagnoseRequest, authorization: str | None = Header(default=None)):
     if settings.SUPABASE_ENABLED:
-        user_id = require_user_id(authorization)
+        user_id = await require_user_id(authorization)
         profile = await supabase_service.get_or_create_profile(user_id)
         require_ultimate(profile.ai_enabled)
     if not settings.DEEPSEEK_API_KEY:
@@ -444,7 +444,7 @@ async def upscale_info():
 @router.post("/upscale")
 async def upscale_start(payload: UpscaleRequest, request: Request, authorization: str | None = Header(default=None)):
     if settings.SUPABASE_ENABLED:
-        user_id = require_user_id(authorization)
+        user_id = await require_user_id(authorization)
         profile = await supabase_service.get_or_create_profile(user_id)
         require_ultimate(profile.ai_enabled)
 
@@ -474,7 +474,7 @@ async def upscale_start(payload: UpscaleRequest, request: Request, authorization
 @router.get("/upscale/status/{prediction_id}")
 async def upscale_status(prediction_id: str, authorization: str | None = Header(default=None)):
     if settings.SUPABASE_ENABLED:
-        user_id = require_user_id(authorization)
+        user_id = await require_user_id(authorization)
         profile = await supabase_service.get_or_create_profile(user_id)
         require_ultimate(profile.ai_enabled)
     try:
@@ -536,13 +536,14 @@ async def get_me(authorization: str | None = Header(default=None)):
     if not settings.SUPABASE_ENABLED:
         return {
             "supabase_enabled": False,
-            "plan": "ultimate",
+            "plan": "free",
             "downloads_used": 0,
-            "downloads_remaining": None,
-            "ai_enabled": True,
+            "downloads_remaining": 5,
+            "ai_enabled": False,
+            "ultimate_until": None,
         }
 
-    user_id = require_user_id(authorization)
+    user_id = await require_user_id(authorization)
     profile = await supabase_service.get_or_create_profile(user_id)
     return {
         "supabase_enabled": True,
@@ -585,9 +586,9 @@ class PromoRedeemRequest(BaseModel):
 @router.post("/promo/redeem")
 async def redeem_promo(payload: PromoRedeemRequest, authorization: str | None = Header(default=None)):
     if not settings.SUPABASE_ENABLED:
-        return {"success": True, "message": "Supabase disabled", "plan": "ultimate", "ultimate_until": None}
+        raise HTTPException(status_code=503, detail="Supabase is not configured on the server (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)")
 
-    user_id = require_user_id(authorization)
+    user_id = await require_user_id(authorization)
     result = await supabase_service.redeem_promo_code(user_id=user_id, code=(payload.code or "").strip())
     # Return fresh entitlements after redeem attempt
     profile = await supabase_service.get_or_create_profile(user_id)

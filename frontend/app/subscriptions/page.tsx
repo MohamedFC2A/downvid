@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -13,10 +14,27 @@ import { t } from '@/lib/i18n';
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api` : '/api';
 
+function UltimateChip() {
+    return (
+        <span className="inline-flex items-center rounded-full border border-[var(--panel-border)] bg-[var(--panel)] px-2 py-0.5 text-[10px] font-mono leading-none">
+            <span className="ultimate-silver">ULTIMATE</span>
+        </span>
+    );
+}
+
 function Feature({ children }: { children: React.ReactNode }) {
     return (
         <li className="text-sm text-[var(--foreground)] opacity-75 leading-relaxed">
             {children}
+        </li>
+    );
+}
+
+function UltimateFeature({ children }: { children: React.ReactNode }) {
+    return (
+        <li className="flex items-start justify-between gap-3 text-sm text-[var(--foreground)] opacity-75 leading-relaxed">
+            <span>{children}</span>
+            <UltimateChip />
         </li>
     );
 }
@@ -30,6 +48,7 @@ export default function SubscriptionsPage() {
     const [promoBusy, setPromoBusy] = useState(false);
     const [promoMsg, setPromoMsg] = useState<string | null>(null);
     const [promoErr, setPromoErr] = useState<string | null>(null);
+    const [showThanks, setShowThanks] = useState(false);
 
     const ultimateUntilLabel = useMemo(() => {
         if (!entitlements.ultimateUntil) return null;
@@ -77,6 +96,7 @@ export default function SubscriptionsPage() {
             }
             setPromo('');
             setPromoMsg(json?.message || t(lang, 'subs.promoSuccess'));
+            setShowThanks(true);
             await entitlements.refresh();
         } catch (e) {
             setPromoErr(e instanceof Error ? e.message : t(lang, 'subs.promoInvalid'));
@@ -150,16 +170,16 @@ export default function SubscriptionsPage() {
                                 <div className="mt-1 text-xs text-[var(--foreground)] opacity-65">{t(lang, 'subs.ultimatePowerSub')}</div>
                             </div>
 
-                            <ul className="mt-5 space-y-2">
-                                <Feature>{t(lang, 'subs.feature.unlimited')}</Feature>
-                                <Feature>{t(lang, 'subs.feature.aiInsights')}</Feature>
-                                <Feature>{t(lang, 'subs.feature.aiSummary')}</Feature>
-                                <Feature>{t(lang, 'subs.feature.aiFix')}</Feature>
-                                <Feature>{t(lang, 'subs.feature.upscale')}</Feature>
-                                <Feature>{t(lang, 'subs.feature.formats')}</Feature>
-                                <Feature>{t(lang, 'subs.feature.priority')}</Feature>
-                                <Feature>{t(lang, 'subs.feature.future')}</Feature>
-                            </ul>
+                        <ul className="mt-5 space-y-2">
+                            <UltimateFeature>{t(lang, 'subs.feature.unlimited')}</UltimateFeature>
+                            <UltimateFeature>{t(lang, 'subs.feature.aiInsights')}</UltimateFeature>
+                            <UltimateFeature>{t(lang, 'subs.feature.aiSummary')}</UltimateFeature>
+                            <UltimateFeature>{t(lang, 'subs.feature.aiFix')}</UltimateFeature>
+                            <UltimateFeature>{t(lang, 'subs.feature.upscale')}</UltimateFeature>
+                            <UltimateFeature>{t(lang, 'subs.feature.formats')}</UltimateFeature>
+                            <UltimateFeature>{t(lang, 'subs.feature.priority')}</UltimateFeature>
+                            <UltimateFeature>{t(lang, 'subs.feature.future')}</UltimateFeature>
+                        </ul>
 
                             <div className="mt-6 rounded-2xl border border-[var(--panel-border)] bg-[var(--deep)] p-4 space-y-3">
                                 <div className="flex items-center justify-between gap-3">
@@ -226,6 +246,61 @@ export default function SubscriptionsPage() {
                     </div>
                 </div>
             </div>
+
+            <AnimatePresence>
+                {showThanks && (
+                    <motion.div
+                        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-6"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setShowThanks(false)}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                            transition={{ duration: 0.2 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="ultimate-sheen-border w-full max-w-lg rounded-3xl p-[1px]"
+                        >
+                            <Card className="rounded-3xl p-6" spotlight={false}>
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <div className="text-sm font-semibold text-[var(--foreground)]">
+                                            {t(lang, 'subs.promoSuccess')}
+                                        </div>
+                                        <div className="mt-2 text-xs text-[var(--foreground)] opacity-70">
+                                            {t(lang, 'subs.ultimatePowerSub')}
+                                        </div>
+                                    </div>
+                                    <div className="shrink-0">
+                                        <span className="ultimate-silver text-sm font-semibold">ULTIMATE</span>
+                                    </div>
+                                </div>
+
+                                <div className="mt-5 rounded-2xl border border-[var(--panel-border)] bg-[var(--deep)] p-4">
+                                    <div className="text-xs font-mono text-[var(--foreground)] opacity-70">
+                                        {ultimateUntilLabel ? ultimateUntilLabel : t(lang, 'subs.currentUltimate')}
+                                    </div>
+                                    <div className="mt-2 text-sm text-[var(--foreground)] opacity-85">
+                                        {t(lang, 'subs.thanks')}
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 flex gap-3">
+                                    <Link href="/tool" className="flex-1" onClick={() => setShowThanks(false)}>
+                                        <Button className="h-11 w-full">{t(lang, 'subs.goTool')}</Button>
+                                    </Link>
+                                    <Button variant="secondary" className="h-11 flex-1" onClick={() => setShowThanks(false)}>
+                                        {t(lang, 'subs.close')}
+                                    </Button>
+                                </div>
+                            </Card>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </main>
     );
 }

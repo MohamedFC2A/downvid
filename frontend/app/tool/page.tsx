@@ -484,7 +484,11 @@ export default function ToolPage() {
                                             <div className="text-[11px] font-mono text-[var(--foreground)] opacity-65">
                                                 {auth.user ? (
                                                     entitlements.plan === "ultimate" ? (
-                                                        t(lang, "subs.planUltimate")
+                                                        <span>
+                                                            <span className="ultimate-silver">ULTIMATE</span>
+                                                            <span className="opacity-75"> · </span>
+                                                            <span className="opacity-75">{t(lang, "subs.unlimitedDownloads")}</span>
+                                                        </span>
                                                     ) : (
                                                         t(lang, "subs.planFreeRemaining", { remaining: String(entitlements.downloadsRemaining ?? 0) })
                                                     )

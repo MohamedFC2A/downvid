@@ -7,11 +7,13 @@ import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/Button';
 import { useSettings } from '@/hooks/useSettings';
 import { useAuth } from '@/hooks/useAuth';
+import { useEntitlements } from '@/hooks/useEntitlements';
 import { t } from '@/lib/i18n';
 
 export function Navbar() {
     const { settings } = useSettings();
     const auth = useAuth();
+    const entitlements = useEntitlements();
     const pathname = usePathname();
     const isRtl = settings.language === 'ar';
     const [open, setOpen] = useState(false);
@@ -66,6 +68,11 @@ export function Navbar() {
                         );
                     })}
                     <div className="h-4 w-px bg-[var(--panel-border)]" />
+                    {auth.user && entitlements.plan === 'ultimate' && (
+                        <div className="hidden lg:inline-flex items-center rounded-full border border-[var(--panel-border)] bg-[var(--panel)] px-3 py-1 text-[10px] font-mono">
+                            <span className="ultimate-silver">ULTIMATE</span>
+                        </div>
+                    )}
                     <Link href="/auth">
                         <Button variant="secondary" className="h-8 text-xs">
                             {auth.user ? t(settings.language, 'nav.account') : t(settings.language, 'nav.login')}
@@ -99,6 +106,11 @@ export function Navbar() {
                                     {auth.user ? t(settings.language, 'nav.account') : t(settings.language, 'nav.login')}
                                 </Button>
                             </Link>
+                            {auth.user && entitlements.plan === 'ultimate' && (
+                                <div className="mt-2 text-center text-[10px] font-mono">
+                                    <span className="ultimate-silver">ULTIMATE</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

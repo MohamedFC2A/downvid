@@ -48,8 +48,7 @@ export function useEntitlements(): Entitlements {
                 throw new Error(json?.detail || json?.error || 'Failed to load subscription');
             }
 
-            const supabaseEnabled = Boolean(json?.supabase_enabled);
-            const nextPlan = (json?.plan || (supabaseEnabled ? 'free' : 'ultimate')).toString().toLowerCase();
+            const nextPlan = (json?.plan || 'free').toString().toLowerCase();
             setPlan(nextPlan === 'ultimate' ? 'ultimate' : 'free');
             setDownloadsUsed(typeof json?.downloads_used === 'number' ? json.downloads_used : 0);
             const remaining = json?.downloads_remaining;

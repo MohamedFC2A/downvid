@@ -72,6 +72,8 @@ const EN: Dict = {
     "subs.feature.formats": "Full quality matrix + advanced formats",
     "subs.feature.priority": "Faster iteration: fewer limits, smoother flow",
     "subs.feature.future": "Access to upcoming premium features",
+    "subs.thanks": "Thank you for upgrading — your account is now Premium.",
+    "subs.close": "Close",
 
     "tool.tagline": "Downvid Control Room",
     "tool.urlPlaceholder": "Paste a URL (YouTube, TikTok, Instagram...)",
@@ -313,6 +315,8 @@ const AR: Dict = {
     "subs.feature.formats": "مصفوفة جودات كاملة وصيغ متقدمة",
     "subs.feature.priority": "تجربة أسرع: حدود أقل وتدفق أنعم",
     "subs.feature.future": "الوصول لمميزات بريميوم القادمة",
+    "subs.thanks": "شكراً لك — حسابك الآن Premium ومهم عندنا.",
+    "subs.close": "إغلاق",
 
     "tool.tagline": "غرفة التحكم",
     "tool.urlPlaceholder": "الصق الرابط (يوتيوب، تيك توك، انستغرام...)",

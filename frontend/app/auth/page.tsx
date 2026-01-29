@@ -8,12 +8,14 @@ import { Logo } from '@/components/Logo';
 import { t } from '@/lib/i18n';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useEntitlements } from '@/hooks/useEntitlements';
 import { useSettings } from '@/hooks/useSettings';
 
 export default function AuthPage() {
     const { settings } = useSettings();
     const lang = settings.language;
     const auth = useAuth();
+    const entitlements = useEntitlements();
     const supabase = useMemo(() => getSupabaseClient(), []);
 
     const [mode, setMode] = useState<'signin' | 'signup'>('signin');
@@ -112,6 +114,11 @@ export default function AuthPage() {
                             <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--deep)] p-4">
                                 <div className="text-xs font-mono opacity-70">{t(lang, 'auth.signedInAs')}</div>
                                 <div className="mt-2 text-sm font-semibold break-all">{auth.user.email}</div>
+                                {entitlements.plan === 'ultimate' && (
+                                    <div className="mt-3 inline-flex items-center rounded-full border border-[var(--panel-border)] bg-[var(--panel)] px-3 py-1 text-[10px] font-mono">
+                                        <span className="ultimate-silver">ULTIMATE</span>
+                                    </div>
+                                )}
                             </div>
                             {message && <div className="text-xs text-[var(--foreground)] opacity-75">{message}</div>}
                             <Button className="h-11 w-full" onClick={onSignOut} disabled={busy || !supabase}>
