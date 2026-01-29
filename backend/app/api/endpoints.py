@@ -214,6 +214,17 @@ async def analyze_video(request: AnalyzeRequest, ai: bool = True, lang: str = "a
     except Exception as e:
         msg = str(e)
         admin_log.add("analyze_error", {"url": request.url, "error": msg})
+        # YouTube bot-check / sign-in challenge
+        if "confirm you" in msg.lower() and "not a bot" in msg.lower():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "YouTube requires sign-in verification (not-a-bot check). "
+                    "Fix: provide cookies (YTDLP_COOKIES_PATH or YTDLP_COOKIES_B64) "
+                    "and/or use a residential proxy (YTDLP_PROXY). "
+                    "Check /api/diagnostics to confirm cookies are detected."
+                ),
+            )
         # Provide actionable hints for the most common YouTube extractor failure
         if "Failed to extract any player response" in msg or "player response" in msg.lower():
             raise HTTPException(

@@ -142,6 +142,20 @@ class YtDlpService:
         ]
         return any(n in m for n in needles)
 
+    def _looks_like_cookie_required(self, msg: str) -> bool:
+        m = (msg or "").lower()
+        needles = [
+            "sign in to confirm you’re not a bot",
+            "sign in to confirm you're not a bot",
+            "confirm you’re not a bot",
+            "confirm you're not a bot",
+            "use --cookies-from-browser",
+            "use --cookies",
+            "login required",
+            "please sign in",
+        ]
+        return any(n in m for n in needles)
+
     def _common_ydl_opts(self) -> dict:
         proxy = (os.getenv("YTDLP_PROXY") or "").strip()
         impersonate = (os.getenv("YTDLP_IMPERSONATE") or "").strip()
@@ -813,6 +827,19 @@ class YtDlpService:
             except Exception as e:
                 last_error = str(e)
                 admin_log.add("download_error", {"client_id": client_id, "label": label, "error": last_error})
+                if self._looks_like_cookie_required(last_error):
+                    await manager.send_personal_message(
+                        {
+                            "status": "error",
+                            "error": (
+                                "YouTube requires sign-in verification (not-a-bot check). "
+                                "Fix: provide cookies via YTDLP_COOKIES_PATH or YTDLP_COOKIES_B64, "
+                                "or use a residential proxy (YTDLP_PROXY). Check /api/diagnostics."
+                            ),
+                        },
+                        client_id,
+                    )
+                    break
                 if "HTTP Error 403" in last_error or "403" in last_error and "forbidden" in last_error.lower():
                     await manager.send_personal_message(
                         {

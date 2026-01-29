@@ -101,6 +101,20 @@ $bytes = [System.IO.File]::ReadAllBytes("cookies.txt")
 ```
 Then copy the content of `cookies.b64` into Railway env var `YTDLP_COOKIES_B64`.
 
+### ✅ Fixing “Sign in to confirm you’re not a bot”
+If you see an error like:
+`Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies...`
+your server IP is being challenged by YouTube. On servers you can’t use `--cookies-from-browser`, so use one of:
+
+**Option A: Cookies (recommended)**
+- Export YouTube cookies from your browser (Netscape `cookies.txt`) and set `YTDLP_COOKIES_B64` (see above).
+- Verify the server sees cookies at: `/api/diagnostics` → `cookies_env_set: true` or `cookies_file_found: true`
+
+**Option B: Residential proxy**
+- Set `YTDLP_PROXY` to a residential proxy URL.
+
+> Note: This is a YouTube anti-bot measure; updating yt-dlp alone usually won’t fix it without cookies/proxy.
+
 **Option B: Proxy (if cookies not possible)**
 Set `YTDLP_PROXY` to a residential proxy URL.
 
