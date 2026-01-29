@@ -46,6 +46,8 @@ const EN: Dict = {
     "ai.copied": "Copied",
     "ai.sourceTranscript": "Transcript",
     "ai.sourceMetadata": "Metadata",
+    "ai.sentiment": "Sentiment",
+    "ai.model": "Model",
 
     "home.pipeline": "Real-time Pipeline",
     "home.secure": "Secure Media",
@@ -153,6 +155,8 @@ const AR: Dict = {
     "ai.copied": "تم النسخ",
     "ai.sourceTranscript": "من النص",
     "ai.sourceMetadata": "من البيانات",
+    "ai.sentiment": "الانطباع",
+    "ai.model": "النموذج",
 
     "home.pipeline": "تحديث لحظي",
     "home.secure": "تحميل آمن",

@@ -39,6 +39,8 @@ export default function ToolPage() {
     const [lastError, setLastError] = useState<string>("");
     const isDataSaver = settings.dataSaver;
     const saveTimerRef = useRef<number | null>(null);
+    const urlTrimmed = url.trim();
+    const isUrlValid = /^https?:\/\/\S+/i.test(urlTrimmed);
 
     // Auto-Platform Detection
     useEffect(() => {
@@ -210,17 +212,7 @@ export default function ToolPage() {
         }
     }
 
-    const platformAccent = platformDetected === 'YouTube'
-        ? 'border-red-500/40'
-        : platformDetected === 'TikTok'
-            ? 'border-cyan-400/40'
-            : platformDetected === 'Instagram'
-                ? 'border-pink-400/40'
-                : platformDetected === 'Facebook'
-                    ? 'border-blue-400/40'
-                    : platformDetected === 'Twitter'
-                        ? 'border-sky-400/40'
-                        : '';
+    const inputAccent = isUrlValid ? 'border-emerald-500/60 focus-visible:border-emerald-500/70 focus-visible:ring-emerald-500/25' : '';
 
     const handleFocus = async () => {
         if (!settings.autoPaste) return;
@@ -243,7 +235,7 @@ export default function ToolPage() {
                     <div className="mb-2">
                         <Logo />
                     </div>
-                    <p className="text-[var(--foreground)] opacity-60 text-sm tracking-[0.3em] uppercase font-mono">
+                    <p className={`text-[var(--foreground)] opacity-60 text-sm font-mono ${lang === "ar" ? "" : "tracking-[0.3em] uppercase"}`}>
                         {t(lang, "tool.tagline")}
                     </p>
                 </div>
@@ -273,7 +265,7 @@ export default function ToolPage() {
                                         }}
                                         onFocus={handleFocus}
                                         placeholder={t(lang, "tool.urlPlaceholder")}
-                                        className={`h-14 text-lg bg-[var(--panel)] border-[var(--panel-border)] focus-visible:ring-[var(--accent-soft)] backdrop-blur-xl transition-all pl-12 pr-12 rounded-xl ${platformDetected ? platformAccent : ''}`}
+                                        className={`h-14 text-lg bg-[var(--panel)] border-[var(--panel-border)] focus-visible:ring-[var(--accent-soft)] backdrop-blur-xl transition-all pl-12 pr-12 rounded-xl ${inputAccent}`}
                                     />
                                     {/* Platform Icon Indicator */}
                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none transition-colors duration-300">

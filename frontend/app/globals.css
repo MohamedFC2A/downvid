@@ -45,15 +45,15 @@
 }
 
 :root[data-theme="light"] {
-  --background: #f5f6f8;
+  --background: #ffffff;
   --foreground: #0b0f12;
-  --ember: #ff9c50;
-  --glow: #ffd179;
-  --deep: #ffffff;
-  --panel: rgba(255, 255, 255, 0.8);
-  --panel-border: rgba(15, 23, 42, 0.12);
-  --accent: #0ea5e9;
-  --accent-soft: rgba(14, 165, 233, 0.18);
+  --ember: #0b0f12;
+  --glow: #0b0f12;
+  --deep: #f6f7f9;
+  --panel: rgba(255, 255, 255, 0.78);
+  --panel-border: rgba(15, 23, 42, 0.14);
+  --accent: #0b0f12;
+  --accent-soft: rgba(15, 23, 42, 0.12);
 }
 
 body {

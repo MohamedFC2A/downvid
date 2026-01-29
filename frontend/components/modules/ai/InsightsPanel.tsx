@@ -62,7 +62,7 @@ export function InsightsPanel({ data, isLoading, url, language, aiEnabled }: Ins
         return (
             <TerminalBlock title="NEURAL ANALYSIS" className="h-[300px]">
                 <div className="flex h-full flex-col justify-between rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-4">
-                    <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.35em] text-zinc-500">
+                    <div className={`flex items-center justify-between text-[11px] font-mono text-zinc-500 ${language === "ar" ? "" : "uppercase tracking-[0.35em]"}`}>
                         <span>DeepSeek V3</span>
                         <span className="rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1 text-[10px] text-green-400">
                             Live
@@ -193,11 +193,11 @@ export function InsightsPanel({ data, isLoading, url, language, aiEnabled }: Ins
 
                 <div className="grid grid-cols-2 gap-4 border-t border-zinc-800/50 pt-4">
                     <div>
-                        <div className="text-zinc-600 mb-1 uppercase text-[10px] tracking-widest">Sentiment</div>
+                        <div className={`text-zinc-600 mb-1 text-[10px] font-mono ${language === "ar" ? "" : "uppercase tracking-widest"}`}>{t(language, "ai.sentiment")}</div>
                         <div className="text-white font-bold tracking-tight">{data.sentiment}</div>
                     </div>
                     <div>
-                        <div className="text-zinc-600 mb-1 uppercase text-[10px] tracking-widest">Model</div>
+                        <div className={`text-zinc-600 mb-1 text-[10px] font-mono ${language === "ar" ? "" : "uppercase tracking-widest"}`}>{t(language, "ai.model")}</div>
                         <div className="text-zinc-400 text-xs text-right">DeepSeek V3</div>
                     </div>
                 </div>

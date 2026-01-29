@@ -17,7 +17,7 @@ export type AppSettings = {
 export const SETTINGS_KEY = 'downvid:settings:v1';
 
 export const defaultSettings: AppSettings = {
-    theme: 'midnight',
+    theme: 'light',
     language: 'en',
     reducedMotion: false,
     dataSaver: false,
@@ -50,10 +50,15 @@ export function loadSettings(): AppSettings {
             };
         }
         const parsed = JSON.parse(raw);
-        return {
+        const merged = {
             ...defaultSettings,
             ...parsed,
         } as AppSettings;
+        // Normalize deprecated/experimental themes
+        if ((merged as unknown as { theme?: string }).theme === 'neon') {
+            merged.theme = 'midnight';
+        }
+        return merged;
     } catch {
         return defaultSettings;
     }
