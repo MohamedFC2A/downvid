@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useSettings } from '@/hooks/useSettings';
 import { Logo } from '@/components/Logo';
 import type { AppLanguage, ThemeMode, UpscaleModel } from '@/lib/settings';
+import { t } from '@/lib/i18n';
 
 const themeOptions: Array<{ id: ThemeMode; title: string; desc: string }> = [
     { id: 'midnight', title: 'Dark Black', desc: 'True black UI with high contrast.' },
@@ -22,6 +23,7 @@ const modelOptions: Array<{ id: UpscaleModel; title: string; desc: string }> = [
 
 export function SettingsPage() {
     const { settings, updateSettings, ready } = useSettings();
+    const lang = settings.language;
     const motionDuration = settings.reducedMotion ? 0 : 0.5;
     const motionDelay = settings.reducedMotion ? 0 : 0.1;
 
@@ -35,10 +37,10 @@ export function SettingsPage() {
                 <header className="flex flex-col gap-4">
                     <Logo />
                     <div className="space-y-2">
-                        <p className="text-xs uppercase tracking-[0.35em] text-cyan-200/70 font-mono">Command Center</p>
-                        <h1 className="text-3xl md:text-4xl font-semibold text-zinc-100">Enterprise Settings</h1>
+                        <p className="text-xs uppercase tracking-[0.35em] text-cyan-200/70 font-mono">{t(lang, 'settings.kicker')}</p>
+                        <h1 className="text-3xl md:text-4xl font-semibold text-zinc-100">{t(lang, 'settings.title')}</h1>
                         <p className="text-zinc-400 max-w-2xl">
-                            Persistent performance controls for appearance, network behavior, and AI upscaling.
+                            {t(lang, 'settings.subtitle')}
                         </p>
                     </div>
                 </header>
@@ -51,8 +53,8 @@ export function SettingsPage() {
                         className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
                     >
                         <div className="mb-6">
-                            <div className="text-xs uppercase tracking-[0.3em] text-cyan-200/70">Appearance</div>
-                            <h2 className="text-lg font-semibold text-zinc-100 mt-2">Theme Engine</h2>
+                            <div className="text-xs uppercase tracking-[0.3em] text-cyan-200/70">{t(lang, 'settings.appearance')}</div>
+                            <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.themeTitle')}</h2>
                         </div>
                         <div className="space-y-4">
                             {themeOptions.map((option) => (
@@ -74,8 +76,8 @@ export function SettingsPage() {
                         </div>
                         <div className="mt-6 border-t border-[var(--panel-border)] pt-6 space-y-6">
                             <div>
-                                <div className="text-xs uppercase tracking-[0.3em] text-cyan-200/70">Language</div>
-                                <h2 className="text-lg font-semibold text-zinc-100 mt-2">AR / EN</h2>
+                                <div className="text-xs uppercase tracking-[0.3em] text-cyan-200/70">{t(lang, 'settings.languageKicker')}</div>
+                                <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.languageTitle')}</h2>
                             </div>
                             <div className="space-y-4">
                                 {languageOptions.map((option) => (
@@ -97,8 +99,8 @@ export function SettingsPage() {
                             </div>
 
                             <ToggleRow
-                                label="Reduced Motion"
-                                description="Minimize motion for accessibility."
+                                label={t(lang, 'settings.reducedMotion')}
+                                description={t(lang, 'settings.reducedMotionDesc')}
                                 enabled={settings.reducedMotion}
                                 onToggle={() => updateSettings({ reducedMotion: !settings.reducedMotion })}
                                 disabled={!ready}
@@ -113,20 +115,20 @@ export function SettingsPage() {
                         className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
                     >
                         <div className="mb-6">
-                            <div className="text-xs uppercase tracking-[0.3em] text-emerald-200/70">Network</div>
-                            <h2 className="text-lg font-semibold text-zinc-100 mt-2">Bandwidth Discipline</h2>
+                            <div className="text-xs uppercase tracking-[0.3em] text-emerald-200/70">{t(lang, 'settings.network')}</div>
+                            <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.bandwidth')}</h2>
                         </div>
                         <div className="space-y-6">
                             <ToggleRow
-                                label="Data Saver"
-                                description="Hide thumbnails and heavy previews."
+                                label={t(lang, 'settings.dataSaver')}
+                                description={t(lang, 'settings.dataSaverDesc')}
                                 enabled={settings.dataSaver}
                                 onToggle={() => updateSettings({ dataSaver: !settings.dataSaver })}
                                 disabled={!ready}
                             />
                             <ToggleRow
-                                label="Auto-Paste"
-                                description="Scan clipboard on focus for links."
+                                label={t(lang, 'settings.autoPaste')}
+                                description={t(lang, 'settings.autoPasteDesc')}
                                 enabled={settings.autoPaste}
                                 onToggle={() => updateSettings({ autoPaste: !settings.autoPaste })}
                                 disabled={!ready}
@@ -141,27 +143,27 @@ export function SettingsPage() {
                         className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
                     >
                         <div className="mb-6">
-                            <div className="text-xs uppercase tracking-[0.3em] text-amber-200/70">AI Preferences</div>
-                            <h2 className="text-lg font-semibold text-zinc-100 mt-2">Default Upscale Model</h2>
+                            <div className="text-xs uppercase tracking-[0.3em] text-amber-200/70">{t(lang, 'settings.ai')}</div>
+                            <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.upscaleModelTitle')}</h2>
                         </div>
                         <div className="space-y-6 mb-6">
                             <ToggleRow
-                                label="DeepSeek Intelligence"
-                                description="Enable metadata insights (summary, sentiment, hashtags)."
+                                label={t(lang, "settings.aiInsights")}
+                                description={t(lang, "settings.aiInsightsDesc")}
                                 enabled={settings.aiInsightsEnabled}
                                 onToggle={() => updateSettings({ aiInsightsEnabled: !settings.aiInsightsEnabled })}
                                 disabled={!ready}
                             />
                             <ToggleRow
-                                label="AI Error Fixer"
-                                description="Enable DeepSeek troubleshooting suggestions on errors."
+                                label={t(lang, "settings.aiFix")}
+                                description={t(lang, "settings.aiFixDesc")}
                                 enabled={settings.aiFixEnabled}
                                 onToggle={() => updateSettings({ aiFixEnabled: !settings.aiFixEnabled })}
                                 disabled={!ready}
                             />
                             <ToggleRow
-                                label="AI Upscale"
-                                description="Show AI 4K upscaler and related controls."
+                                label={t(lang, "settings.aiUpscale")}
+                                description={t(lang, "settings.aiUpscaleDesc")}
                                 enabled={settings.upscaleEnabled}
                                 onToggle={() => updateSettings({ upscaleEnabled: !settings.upscaleEnabled })}
                                 disabled={!ready}

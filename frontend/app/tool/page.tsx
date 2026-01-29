@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/Card";
 import { UpscaleButton } from "@/components/UpscaleButton";
 import { useSettings } from "@/hooks/useSettings";
 import { t } from "@/lib/i18n";
+import { PlatformIcon, type PlatformId } from "@/components/PlatformIcon";
 
 const LAST_SELECTION_KEY = "downvid:lastSelection:v1";
 
@@ -46,6 +47,18 @@ export default function ToolPage() {
         else if (u.includes('twitter.com') || u.includes('x.com')) setPlatformDetected('Twitter');
         else setPlatformDetected(null);
     }, [url]);
+
+    const platformId: PlatformId = platformDetected === 'YouTube'
+        ? 'youtube'
+        : platformDetected === 'TikTok'
+            ? 'tiktok'
+            : platformDetected === 'Instagram'
+                ? 'instagram'
+                : platformDetected === 'Facebook'
+                    ? 'facebook'
+                    : platformDetected === 'Twitter'
+                        ? 'x'
+                        : 'unknown';
 
     const clientId = useMemo(() => Math.random().toString(36).slice(2), []);
     const wsRef = useRef<WebSocketClient | null>(null);
@@ -220,9 +233,8 @@ export default function ToolPage() {
                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none transition-colors duration-300">
                                         {platformDetected ? (
                                             <span className="text-cyan-400">
-                                                {/* Simple SVG Icons based on platform could go here, for now using initial char in a styled box */}
-                                                <div className="w-6 h-6 flex items-center justify-center font-bold font-mono border border-cyan-400 rounded bg-cyan-900/40">
-                                                    {platformDetected[0]}
+                                                <div className="w-7 h-7 flex items-center justify-center rounded border border-[var(--panel-border)] bg-[var(--deep)]">
+                                                    <PlatformIcon platform={platformId} className="w-5 h-5" />
                                                 </div>
                                             </span>
                                         ) : (
@@ -250,6 +262,14 @@ export default function ToolPage() {
                                 {showAdmin ? t(lang, "tool.hideLogs") : t(lang, "tool.showLogs")}
                             </Button>
                         </div>
+                        <div className="flex items-center justify-between">
+                            <div className="text-[11px] text-zinc-500 font-mono">
+                                {platformDetected ? `${platformDetected}` : ""}
+                            </div>
+                            <Button variant="secondary" className="h-8 px-3 text-[11px]" disabled>
+                                {t(lang, "tool.platformBeta")}
+                            </Button>
+                        </div>
 
                         {status.status === "error" && (
                             <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
@@ -270,7 +290,7 @@ export default function ToolPage() {
                                             <img src={videoInfo.thumbnail} alt={videoInfo.title} className="object-cover w-full h-full opacity-95" />
                                         ) : (
                                             <div className="flex items-center justify-center h-full text-zinc-600 font-mono text-xs">
-                                                {isDataSaver ? 'Preview hidden (Data Saver)' : 'No Preview'}
+                                                {isDataSaver ? t(lang, "tool.previewHidden") : t(lang, "tool.noPreview")}
                                             </div>
                                         )}
                                     </div>
@@ -287,7 +307,7 @@ export default function ToolPage() {
                                 <Card className="glass-panel rounded-2xl" spotlight={false}>
                                     <div className="p-5 space-y-4">
                                         <div className="flex items-center justify-between">
-                                            <div className="text-sm font-semibold">Quality</div>
+                                            <div className="text-sm font-semibold">{t(lang, "tool.quality")}</div>
                                             <div className="text-[11px] text-zinc-500 font-mono">
                                                 WebSocket: {wsRef.current?.isConnected ? t(lang, "tool.wsConnected") : t(lang, "tool.wsReconnecting")}
                                             </div>

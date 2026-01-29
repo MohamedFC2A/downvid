@@ -1,8 +1,14 @@
+'use client';
+
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
+import { useSettings } from "@/hooks/useSettings";
+import { t } from "@/lib/i18n";
 
 export default function Home() {
+  const { settings } = useSettings();
+  const lang = settings.language;
   return (
     <main className="relative min-h-screen w-full overflow-hidden bg-ember">
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-20" />
@@ -14,34 +20,33 @@ export default function Home() {
           </div>
           <div className="hidden items-center gap-6 text-xs uppercase tracking-[0.35em] text-zinc-400 md:flex">
             <span className="text-zinc-200">DOWNVID</span>
-            <span>Real-time Pipeline</span>
-            <span>Secure Media</span>
+            <span>{t(lang, "home.pipeline")}</span>
+            <span>{t(lang, "home.secure")}</span>
           </div>
         </header>
 
         <div className="grid items-center gap-10 md:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-8">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-2 text-xs uppercase tracking-[0.3em] text-zinc-300">
-              DOWNVID · Precision Media Engine
+              {t(lang, "home.badge")}
             </div>
             <h1 className="font-display text-4xl leading-[1.05] text-zinc-100 sm:text-5xl md:text-6xl">
-              Every quality. Every format.
+              {t(lang, "home.headline1")}
               <span className="block text-[clamp(2.4rem,6vw,4.3rem)] text-amber-200/90">
-                Zero guesswork for creators.
+                {t(lang, "home.headline2")}
               </span>
             </h1>
             <p className="max-w-xl text-lg leading-relaxed text-zinc-300">
-              DOWNVID turns messy links into clean, organized downloads with the exact resolution you want.
-              Scan, compare, and pull every available stream in one sleek control room.
+              {t(lang, "home.sub")}
             </p>
             <div className="flex flex-col gap-4 sm:flex-row">
               <Link href="/tool">
                 <Button className="h-14 px-10 text-base rounded-full">
-                  Launch DOWNVID
+                  {t(lang, "home.launch")}
                 </Button>
               </Link>
               <Button variant="secondary" className="h-14 px-10 text-base rounded-full border-white/20 text-zinc-200">
-                View Workflow
+                {t(lang, "home.workflow")}
               </Button>
             </div>
           </div>
@@ -49,20 +54,20 @@ export default function Home() {
           <div className="grid gap-4 sm:grid-cols-2">
             {[
               {
-                title: "Quality Matrix",
-                desc: "All video and audio qualities visible at once, ranked by resolution, codec, and size.",
+                title: t(lang, "home.card.qm.title"),
+                desc: t(lang, "home.card.qm.desc"),
               },
               {
-                title: "Realtime Stream",
-                desc: "Live WebSocket progress for downloads, merges, and post-processing.",
+                title: t(lang, "home.card.rt.title"),
+                desc: t(lang, "home.card.rt.desc"),
               },
               {
-                title: "Smart Formats",
-                desc: "Muxed and video-only options with fallbacks for tricky sources.",
+                title: t(lang, "home.card.sf.title"),
+                desc: t(lang, "home.card.sf.desc"),
               },
               {
-                title: "Studio Control",
-                desc: "Preview thumbnails, inspect metadata, and lock in the exact output.",
+                title: t(lang, "home.card.sc.title"),
+                desc: t(lang, "home.card.sc.desc"),
               },
             ].map((card) => (
               <div
@@ -80,9 +85,9 @@ export default function Home() {
 
         <div className="grid gap-4 sm:grid-cols-3">
           {[
-            { label: "Multi-source coverage", value: "YouTube · TikTok · IG" },
-            { label: "Adaptive formats", value: "Muxed + Video-only + Audio-only" },
-            { label: "Optimized pipeline", value: "DeepSeek + Python" },
+            { label: t(lang, "home.stat.coverage.label"), value: t(lang, "home.stat.coverage.value") },
+            { label: t(lang, "home.stat.adaptive.label"), value: t(lang, "home.stat.adaptive.value") },
+            { label: t(lang, "home.stat.optimized.label"), value: t(lang, "home.stat.optimized.value") },
           ].map((item) => (
             <div
               key={item.label}
