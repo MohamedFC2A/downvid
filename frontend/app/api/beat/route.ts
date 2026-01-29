@@ -58,13 +58,29 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json().catch(() => null)) as
-        | { url?: string; title?: string; description?: string; duration_seconds?: number; transcript_text?: string }
+        | {
+              url?: string;
+              title?: string;
+              description?: string;
+              duration_seconds?: number;
+              transcript_text?: string;
+              vision_shots?: Array<{
+                  start_sec?: number;
+                  end_sec?: number;
+                  energy_score?: number;
+                  energy_label?: string;
+                  note?: string;
+                  confidence?: number;
+              }>;
+          }
         | null;
     const url = (body?.url || '').trim();
     const title = (body?.title || '').trim();
     const description = (body?.description || '').trim();
     const transcriptText = (body?.transcript_text || '').trim();
     const durationSeconds = typeof body?.duration_seconds === 'number' && Number.isFinite(body.duration_seconds) ? Math.floor(body.duration_seconds) : null;
+
+    const visionShots = Array.isArray(body?.vision_shots) ? body!.vision_shots!.slice(0, 24) : [];
 
     const hasUrl = /^https?:\/\/\S+/i.test(url);
     if (!hasUrl && !title && !description) {
@@ -100,6 +116,22 @@ export async function POST(req: Request) {
     }
 
     const outLang = lang === 'ar' ? 'Arabic' : 'English';
+    const visionBlock = visionShots.length
+        ? `
+Vision shots (auto-detected from uploaded clip):
+${visionShots
+    .map((s) => {
+        const start = typeof s.start_sec === 'number' && Number.isFinite(s.start_sec) ? Math.max(0, Math.floor(s.start_sec)) : 0;
+        const end = typeof s.end_sec === 'number' && Number.isFinite(s.end_sec) ? Math.max(start + 1, Math.floor(s.end_sec)) : start + 1;
+        const energy = typeof s.energy_score === 'number' && Number.isFinite(s.energy_score) ? Math.round(Math.max(0, Math.min(1, s.energy_score)) * 100) : 0;
+        const lbl = typeof s.energy_label === 'string' ? s.energy_label : '';
+        const note = typeof s.note === 'string' ? s.note : '';
+        const conf = typeof s.confidence === 'number' && Number.isFinite(s.confidence) ? Math.round(Math.max(0, Math.min(1, s.confidence)) * 100) : 0;
+        return `- ${start}s–${end}s | energy ${energy}% (${lbl}) | confidence ${conf}% | ${note}`;
+    })
+    .join('\n')}
+`
+        : '';
     const prompt = `
 You are a creator workflow assistant.
 
@@ -113,6 +145,7 @@ Input:
 - Duration seconds: ${durationSeconds ?? 'N/A'}
 - Transcript (may be empty):
 ${transcriptText ? transcriptText.slice(0, 12000) : ''}
+${visionBlock}
 
 Return STRICT JSON with keys:
 - title: string
@@ -128,6 +161,9 @@ Return STRICT JSON with keys:
   - end_sec: number (> start_sec)
   - title: short title
   - hook: 1 line hook
+- pacing: object (optional but recommended if Vision shots provided):
+  - highlights: array of up to 8 objects: { start_sec,end_sec, why }
+  - boring_parts: array of up to 8 objects: { start_sec,end_sec, why, fix }
 - exports:
   - youtube_chapters: string with lines like "00:00 Intro"
   - markers_csv: CSV string with header "time_sec,label,comment" and 8-16 rows
@@ -138,6 +174,7 @@ Rules:
 - If duration_seconds is null, assume 180 seconds for timing.
 - Ensure all times are within the duration.
 - Keep beats ordered by time with no overlaps.
+- If Vision shots are provided, prefer aligning beats to those boundaries and respect the energy labels.
 `;
 
     const res = await fetch('https://api.deepseek.com/chat/completions', {
@@ -181,6 +218,7 @@ Rules:
         beats?: unknown;
         shorts?: unknown;
         exports?: unknown;
+        pacing?: unknown;
     };
 
     function asRecord(v: unknown): Record<string, unknown> | null {
@@ -192,6 +230,7 @@ Rules:
         duration_seconds: number;
         beats: Beat[];
         shorts: Array<{ start_sec: number; end_sec: number; title: string; hook: string }>;
+        pacing?: { highlights: Array<{ start_sec: number; end_sec: number; why: string }>; boring_parts: Array<{ start_sec: number; end_sec: number; why: string; fix: string }> };
         exports: { youtube_chapters: string; markers_csv: string; shotlist_md: string; broll_prompts: string };
     } {
         const obj = (asRecord(input) as BeatPack | null) || {};
@@ -266,11 +305,47 @@ Rules:
                 ? ex.broll_prompts
                 : cleanedBeats.map((b) => `- B-roll for: ${b.label}`).join('\n') + '\n';
 
+        const pacingRaw = asRecord(obj.pacing) || {};
+        const highlightsRaw = Array.isArray(pacingRaw.highlights) ? pacingRaw.highlights.slice(0, 8) : [];
+        const boringRaw = Array.isArray(pacingRaw.boring_parts) ? pacingRaw.boring_parts.slice(0, 8) : [];
+        const pacing = {
+            highlights: highlightsRaw
+                .map((it) => {
+                    const r = asRecord(it) || {};
+                    const start = Number(r.start_sec);
+                    const end = Number(r.end_sec);
+                    const startSec = Number.isFinite(start) ? Math.max(0, Math.min(dur - 1, Math.floor(start))) : 0;
+                    const endSec = Number.isFinite(end) ? Math.max(startSec + 1, Math.min(dur, Math.floor(end))) : Math.min(dur, startSec + 10);
+                    return {
+                        start_sec: startSec,
+                        end_sec: endSec,
+                        why: typeof r.why === 'string' ? r.why : '',
+                    };
+                })
+                .filter((x) => x.why.trim()),
+            boring_parts: boringRaw
+                .map((it) => {
+                    const r = asRecord(it) || {};
+                    const start = Number(r.start_sec);
+                    const end = Number(r.end_sec);
+                    const startSec = Number.isFinite(start) ? Math.max(0, Math.min(dur - 1, Math.floor(start))) : 0;
+                    const endSec = Number.isFinite(end) ? Math.max(startSec + 1, Math.min(dur, Math.floor(end))) : Math.min(dur, startSec + 10);
+                    return {
+                        start_sec: startSec,
+                        end_sec: endSec,
+                        why: typeof r.why === 'string' ? r.why : '',
+                        fix: typeof r.fix === 'string' ? r.fix : '',
+                    };
+                })
+                .filter((x) => x.why.trim() || x.fix.trim()),
+        };
+
         return {
             title: typeof obj.title === 'string' && obj.title.trim() ? obj.title : (title || (hasUrl ? 'Video' : 'Video')),
             duration_seconds: dur,
             beats: cleanedBeats,
             shorts: cleanedShorts,
+            pacing: pacing.highlights.length || pacing.boring_parts.length ? pacing : undefined,
             exports: {
                 youtube_chapters: youtubeChapters,
                 markers_csv: markersCsv,

@@ -17,10 +17,24 @@ type BeatResponse = {
     duration_seconds?: number | null;
     beats?: Array<{ start_sec: number; end_sec: number; label?: string; goal?: string; caption?: string }>;
     shorts?: Array<{ start_sec?: number; end_sec?: number; title?: string; hook?: string }>;
+    pacing?: {
+        highlights?: Array<{ start_sec: number; end_sec: number; why?: string }>;
+        boring_parts?: Array<{ start_sec: number; end_sec: number; why?: string; fix?: string }>;
+    };
     exports?: { youtube_chapters?: string; markers_csv?: string; shotlist_md?: string; broll_prompts?: string };
 };
 
-type SceneCut = { time_sec: number; score: number; thumbnail_data_url: string };
+type VisionShot = {
+    start_sec: number;
+    end_sec: number;
+    motion_score: number; // 0..1
+    audio_score: number | null; // 0..1
+    energy_score: number; // 0..1
+    energy_label: 'high' | 'mid' | 'low';
+    note: string;
+    confidence: number; // 0..1
+    thumbnail_data_url: string;
+};
 
 function downloadText(filename: string, content: string) {
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -65,8 +79,8 @@ export default function BeatPage() {
     const [thumbs, setThumbs] = useState<Record<string, string>>({});
     const [thumbBusy, setThumbBusy] = useState(false);
     const [thumbProgress, setThumbProgress] = useState<{ done: number; total: number } | null>(null);
-    const [cutsBusy, setCutsBusy] = useState(false);
-    const [cuts, setCuts] = useState<SceneCut[]>([]);
+    const [visionBusy, setVisionBusy] = useState(false);
+    const [visionShots, setVisionShots] = useState<VisionShot[]>([]);
 
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -81,7 +95,7 @@ export default function BeatPage() {
         const next = URL.createObjectURL(file);
         setFileUrl(next);
         setFileMeta(null);
-        setCuts([]);
+        setVisionShots([]);
         setThumbs({});
         setData(null);
         setError(null);
@@ -151,62 +165,218 @@ export default function BeatPage() {
         return canvas.toDataURL('image/jpeg', 0.86);
     }
 
-    async function frameStats(sec: number): Promise<{ r: number; g: number; b: number }> {
+    function clamp01(v: number): number {
+        if (!Number.isFinite(v)) return 0;
+        return Math.max(0, Math.min(1, v));
+    }
+
+    function percentile(values: number[], p: number): number {
+        if (!values.length) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const idx = Math.max(0, Math.min(sorted.length - 1, Math.floor(p * (sorted.length - 1))));
+        return sorted[idx];
+    }
+
+    function normByRange(v: number, lo: number, hi: number): number {
+        if (!Number.isFinite(v) || !Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return 0;
+        return clamp01((v - lo) / (hi - lo));
+    }
+
+    async function frameLuma(sec: number, w = 64, h = 36): Promise<Uint8Array> {
         const video = videoRef.current;
         if (!video) throw new Error('Video is not ready');
         await seekTo(sec);
         const canvas = ensureCanvas();
-        canvas.width = 40;
-        canvas.height = 22;
+        canvas.width = w;
+        canvas.height = h;
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         if (!ctx) throw new Error('Canvas not available');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(video, 0, 0, w, h);
+        const img = ctx.getImageData(0, 0, w, h);
         const px = img.data;
-        let r = 0;
-        let g = 0;
-        let b = 0;
-        const n = canvas.width * canvas.height;
-        for (let i = 0; i < px.length; i += 4) {
-            r += px[i];
-            g += px[i + 1];
-            b += px[i + 2];
+        const out = new Uint8Array(w * h);
+        for (let i = 0, j = 0; i < px.length; i += 4, j += 1) {
+            // fast luminance approximation
+            out[j] = (px[i] * 3 + px[i + 1] * 4 + px[i + 2]) >> 3;
         }
-        return { r: r / n, g: g / n, b: b / n };
+        return out;
     }
 
-    async function analyzeCuts() {
-        setCuts([]);
+    function lumaDiff(a: Uint8Array, b: Uint8Array): number {
+        const n = Math.min(a.length, b.length);
+        if (n <= 0) return 0;
+        let sum = 0;
+        for (let i = 0; i < n; i++) {
+            sum += Math.abs(a[i] - b[i]);
+        }
+        // Normalize to ~0..1
+        return (sum / n) / 255;
+    }
+
+    async function decodeAudioRmsSeries(sampleTimes: number[], windowSec = 0.25): Promise<number[] | null> {
+        if (!file) return null;
+        try {
+            const buf = await file.arrayBuffer();
+            // Browsers may fail decoding some containers; keep this best-effort.
+            const AnyAudioContext = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+            if (!AnyAudioContext) return null;
+            const ctx = new AnyAudioContext();
+            const audio = await ctx.decodeAudioData(buf.slice(0));
+            await ctx.close();
+
+            const sr = audio.sampleRate;
+            const win = Math.max(1, Math.floor(windowSec * sr));
+            const chan = Math.max(1, audio.numberOfChannels);
+            const channels: Float32Array[] = [];
+            for (let c = 0; c < chan; c++) channels.push(audio.getChannelData(c));
+
+            const out: number[] = [];
+            for (const tSec of sampleTimes) {
+                const center = Math.max(0, Math.min(audio.duration, tSec));
+                const start = Math.max(0, Math.min(audio.length - 1, Math.floor(center * sr) - Math.floor(win / 2)));
+                const end = Math.max(start + 1, Math.min(audio.length, start + win));
+                let sumSq = 0;
+                let count = 0;
+                for (let c = 0; c < chan; c++) {
+                    const arr = channels[c];
+                    for (let i = start; i < end; i++) {
+                        const v = arr[i] || 0;
+                        sumSq += v * v;
+                        count += 1;
+                    }
+                }
+                const rms = count > 0 ? Math.sqrt(sumSq / count) : 0;
+                out.push(rms);
+            }
+            return out;
+        } catch {
+            return null;
+        }
+    }
+
+    function energyLabel(score: number): 'high' | 'mid' | 'low' {
+        if (score >= 0.66) return 'high';
+        if (score >= 0.38) return 'mid';
+        return 'low';
+    }
+
+    async function runVision(): Promise<VisionShot[]> {
+        setVisionShots([]);
         setError(null);
         const meta = fileMeta;
-        if (!meta || !Number.isFinite(meta.duration) || meta.duration <= 0) return;
-        setCutsBusy(true);
+        if (!meta || !Number.isFinite(meta.duration) || meta.duration <= 0) return [];
+        setVisionBusy(true);
         try {
-            const maxSamples = 120;
-            const step = Math.max(0.8, meta.duration / maxSamples);
-            let prev: { r: number; g: number; b: number } | null = null;
-            const diffs: Array<{ time_sec: number; score: number }> = [];
-            for (let tSec = 0; tSec < meta.duration; tSec += step) {
-                const now = await frameStats(tSec);
+            const duration = meta.duration;
+            const maxSamples = 160;
+            const step = Math.max(0.5, duration / maxSamples);
+            const times: number[] = [];
+            for (let tSec = 0; tSec < duration; tSec += step) times.push(tSec);
+            if (times[times.length - 1] < duration) times.push(duration);
+
+            const motionRaw: number[] = [];
+            let prev: Uint8Array | null = null;
+            for (let i = 0; i < times.length; i++) {
+                const cur = await frameLuma(times[i], 64, 36);
                 if (prev) {
-                    const dr = now.r - prev.r;
-                    const dg = now.g - prev.g;
-                    const db = now.b - prev.b;
-                    diffs.push({ time_sec: tSec, score: Math.sqrt(dr * dr + dg * dg + db * db) });
+                    motionRaw.push(lumaDiff(prev, cur));
+                } else {
+                    motionRaw.push(0);
                 }
-                prev = now;
+                prev = cur;
             }
-            diffs.sort((a, b) => b.score - a.score);
-            const picks = diffs.slice(0, 12).sort((a, b) => a.time_sec - b.time_sec);
-            const out: SceneCut[] = [];
-            for (const p of picks) {
-                out.push({ time_sec: p.time_sec, score: p.score, thumbnail_data_url: await captureJpeg(p.time_sec, 520) });
+
+            // Pick scene change peaks (greedy, spaced)
+            const p90 = percentile(motionRaw, 0.9);
+            const p97 = percentile(motionRaw, 0.97);
+            const threshold = Math.max(0.08, (p90 + p97) / 2);
+            const candidates = times
+                .map((tSec, idx) => ({ tSec, idx, v: motionRaw[idx] || 0 }))
+                .filter((x) => x.tSec > 0.5 && x.tSec < duration - 0.5 && x.v >= threshold)
+                .sort((a, b) => b.v - a.v);
+
+            const minGap = 1.2;
+            const cutTimes: number[] = [0];
+            for (const c of candidates) {
+                if (cutTimes.some((tSec) => Math.abs(tSec - c.tSec) < minGap)) continue;
+                cutTimes.push(c.tSec);
+                if (cutTimes.length >= 26) break; // <=25 segments
             }
-            setCuts(out);
+            cutTimes.push(duration);
+            cutTimes.sort((a, b) => a - b);
+
+            const audioRaw = await decodeAudioRmsSeries(times);
+
+            const motionLo = percentile(motionRaw, 0.2);
+            const motionHi = Math.max(motionLo + 1e-6, percentile(motionRaw, 0.9));
+            const audioLo = audioRaw ? percentile(audioRaw, 0.2) : 0;
+            const audioHi = audioRaw ? Math.max(audioLo + 1e-9, percentile(audioRaw, 0.9)) : 1;
+
+            const out: VisionShot[] = [];
+            for (let i = 0; i < cutTimes.length - 1; i++) {
+                const start = cutTimes[i];
+                const end = cutTimes[i + 1];
+                if (end - start < 0.35) continue;
+
+                // Aggregate motion/audio over sample points inside the segment
+                let mSum = 0;
+                let mN = 0;
+                let aSum = 0;
+                let aN = 0;
+                for (let j = 0; j < times.length; j++) {
+                    const tSec = times[j];
+                    if (tSec < start || tSec >= end) continue;
+                    mSum += motionRaw[j] || 0;
+                    mN += 1;
+                    if (audioRaw) {
+                        aSum += audioRaw[j] || 0;
+                        aN += 1;
+                    }
+                }
+                const motionAvg = mN > 0 ? mSum / mN : 0;
+                const audioAvg = audioRaw && aN > 0 ? aSum / aN : null;
+                const motionScore = normByRange(motionAvg, motionLo, motionHi);
+                const audioScore = audioAvg === null ? null : normByRange(audioAvg, audioLo, audioHi);
+                const energy = audioScore === null ? motionScore : clamp01(motionScore * 0.65 + audioScore * 0.35);
+                const label = energyLabel(energy);
+
+                const confidence = clamp01(Math.abs(energy - 0.5) * 2);
+                const baseNote =
+                    label === 'high'
+                        ? t(lang, 'beat.energyNoteHigh')
+                        : label === 'mid'
+                            ? t(lang, 'beat.energyNoteMid')
+                            : t(lang, 'beat.energyNoteLow');
+                const motionPct = Math.round(motionScore * 100);
+                const audioPct = audioScore === null ? null : Math.round(audioScore * 100);
+                const note = `${baseNote} · ${t(lang, 'beat.metricMotionShort')}: ${motionPct}%${audioPct === null ? '' : ` · ${t(lang, 'beat.metricAudioShort')}: ${audioPct}%`}`;
+
+                const mid = start + (end - start) / 2;
+                const thumb = await captureJpeg(mid, 520);
+
+                out.push({
+                    start_sec: start,
+                    end_sec: end,
+                    motion_score: motionScore,
+                    audio_score: audioScore,
+                    energy_score: energy,
+                    energy_label: label,
+                    note,
+                    confidence,
+                    thumbnail_data_url: thumb,
+                });
+            }
+
+            // Keep it usable: sort by timeline and cap for UI.
+            out.sort((a, b) => a.start_sec - b.start_sec);
+            const capped = out.slice(0, 24);
+            setVisionShots(capped);
+            return capped;
         } catch (e) {
             setError(e instanceof Error ? e.message : t(lang, 'beat.visionFailed'));
+            return [];
         } finally {
-            setCutsBusy(false);
+            setVisionBusy(false);
         }
     }
 
@@ -233,7 +403,7 @@ export default function BeatPage() {
     async function onGenerate() {
         setError(null);
         setData(null);
-        setCuts([]);
+        setVisionShots([]);
         setThumbs({});
 
         const u = url.trim();
@@ -251,6 +421,7 @@ export default function BeatPage() {
 
         setBusy(true);
         try {
+            const vision = mode === 'upload' ? await runVision() : [];
             const qs = new URLSearchParams();
             qs.set('lang', lang);
             const res = await fetch(`/api/beat?${qs.toString()}`, {
@@ -267,6 +438,14 @@ export default function BeatPage() {
                               description: localDescription.trim(),
                               duration_seconds: Math.floor(fileMeta?.duration || 0),
                               transcript_text: localTranscript.trim(),
+                              vision_shots: vision.map((s) => ({
+                                  start_sec: s.start_sec,
+                                  end_sec: s.end_sec,
+                                  energy_score: s.energy_score,
+                                  energy_label: s.energy_label,
+                                  note: s.note,
+                                  confidence: s.confidence,
+                              })),
                           }
                 ),
             });
@@ -278,7 +457,6 @@ export default function BeatPage() {
             setData(next);
             if (mode === 'upload') {
                 void generateBeatThumbnails(next);
-                void analyzeCuts();
             }
         } catch (e) {
             setError(e instanceof Error ? e.message : 'BEAT failed');
@@ -377,10 +555,10 @@ export default function BeatPage() {
                                             <Button
                                                 variant="secondary"
                                                 className="h-9 text-xs"
-                                                onClick={() => void analyzeCuts()}
-                                                disabled={cutsBusy || !fileMeta?.duration}
+                                                onClick={() => void runVision()}
+                                                disabled={busy || thumbBusy || visionBusy || !fileMeta?.duration}
                                             >
-                                                {cutsBusy ? t(lang, 'beat.visionRunning') : t(lang, 'beat.visionRun')}
+                                                {visionBusy ? t(lang, 'beat.visionRunning') : t(lang, 'beat.visionRun')}
                                             </Button>
                                         </div>
                                         <div className="mt-3">
@@ -526,7 +704,7 @@ export default function BeatPage() {
                                 </div>
                             </div>
 
-                            {mode === 'upload' && cuts.length > 0 && (
+                            {mode === 'upload' && visionShots.length > 0 && (
                                 <div className="mt-5 rounded-2xl border border-[var(--panel-border)] bg-[var(--deep)] p-4">
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="text-sm font-semibold">
@@ -536,10 +714,13 @@ export default function BeatPage() {
                                         </div>
                                         <div className="text-[11px] font-mono opacity-60">{t(lang, 'beat.visionHint')}</div>
                                     </div>
+                                    <div className="mt-2 text-[11px] font-mono opacity-60">
+                                        {t(lang, 'beat.visionDisclaimer')}
+                                    </div>
                                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                        {cuts.slice(0, 12).map((c, idx) => (
+                                        {visionShots.slice(0, 12).map((c, idx) => (
                                             <div
-                                                key={`${c.time_sec}-${idx}`}
+                                                key={`${c.start_sec}-${idx}`}
                                                 className="rounded-2xl border border-[var(--panel-border)] bg-[var(--panel)] overflow-hidden"
                                             >
                                                 <Image
@@ -550,12 +731,72 @@ export default function BeatPage() {
                                                     unoptimized
                                                     className="h-28 w-full object-cover"
                                                 />
-                                                <div className="p-3 flex items-center justify-between gap-3">
-                                                    <div className="text-xs font-mono opacity-70">{fmtTime(c.time_sec)}</div>
-                                                    <div className="text-[11px] font-mono opacity-60">{c.score.toFixed(2)}</div>
+                                                <div className="p-3 space-y-2">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div className="text-xs font-mono opacity-70">
+                                                            {fmtTime(c.start_sec)} → {fmtTime(c.end_sec)}
+                                                        </div>
+                                                        <div className="text-[11px] font-mono opacity-60">
+                                                            {t(lang, 'beat.visionConfidence', { p: String(Math.round(c.confidence * 100)) })}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div className="text-sm font-semibold">
+                                                            <span className="ultimate-silver">BEAT</span>
+                                                            <span className="opacity-70"> · </span>
+                                                            <span className={c.energy_label === 'high' ? 'text-green-700' : c.energy_label === 'low' ? 'text-red-700' : 'text-[var(--foreground)] opacity-80'}>
+                                                                {c.energy_label === 'high' ? t(lang, 'beat.energyHigh') : c.energy_label === 'mid' ? t(lang, 'beat.energyMid') : t(lang, 'beat.energyLow')}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-[11px] font-mono opacity-60">{Math.round(c.energy_score * 100)}%</div>
+                                                    </div>
+                                                    <div className="text-xs opacity-70">{c.note}</div>
                                                 </div>
                                             </div>
                                         ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {data.pacing && (
+                                <div className="mt-5 rounded-2xl border border-[var(--panel-border)] bg-[var(--deep)] p-4">
+                                    <div className="text-sm font-semibold">
+                                        <span className="ultimate-silver">BEAT</span>
+                                        <span className="opacity-70"> · </span>
+                                        {t(lang, 'beat.pacingTitle')}
+                                    </div>
+                                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                        {(data.pacing.highlights || []).length > 0 && (
+                                            <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--panel)] p-4">
+                                                <div className="text-xs font-mono opacity-60">{t(lang, 'beat.pacingHighlights')}</div>
+                                                <div className="mt-3 space-y-3">
+                                                    {(data.pacing.highlights || []).slice(0, 8).map((h, idx) => (
+                                                        <div key={idx} className="text-sm">
+                                                            <div className="text-[11px] font-mono opacity-70">
+                                                                {fmtTime(h.start_sec)} → {fmtTime(h.end_sec)}
+                                                            </div>
+                                                            {h.why && <div className="mt-1 text-xs opacity-75">{h.why}</div>}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {(data.pacing.boring_parts || []).length > 0 && (
+                                            <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--panel)] p-4">
+                                                <div className="text-xs font-mono opacity-60">{t(lang, 'beat.pacingBoring')}</div>
+                                                <div className="mt-3 space-y-3">
+                                                    {(data.pacing.boring_parts || []).slice(0, 8).map((b, idx) => (
+                                                        <div key={idx} className="text-sm">
+                                                            <div className="text-[11px] font-mono opacity-70">
+                                                                {fmtTime(b.start_sec)} → {fmtTime(b.end_sec)}
+                                                            </div>
+                                                            {b.why && <div className="mt-1 text-xs opacity-75">{b.why}</div>}
+                                                            {b.fix && <div className="mt-1 text-xs opacity-70">{t(lang, 'beat.pacingFix')}: {b.fix}</div>}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
