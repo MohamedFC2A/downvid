@@ -216,8 +216,13 @@ export default function ToolPage() {
                                     )}
                                 </div>
                             </div>
-                            <Button className="h-12 px-6 text-sm font-semibold" onClick={onAnalyze} disabled={isAnalyzing || !url.trim()}>
-                                {isAnalyzing ? "Analyzing..." : "Analyze"}
+                            <Button
+                                className="h-12 px-6 text-sm font-semibold"
+                                onClick={onAnalyze}
+                                disabled={!url.trim()}
+                                isLoading={isAnalyzing}
+                            >
+                                Analyze
                             </Button>
                             <Button
                                 variant="secondary"
