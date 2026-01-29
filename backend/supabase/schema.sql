@@ -19,6 +19,10 @@ create table if not exists public.user_profiles (
   updated_at timestamptz not null default now()
 );
 
+-- If the table existed before, ensure new columns exist (idempotent migrations)
+alter table public.user_profiles
+  add column if not exists ultimate_until timestamptz null;
+
 create index if not exists user_profiles_plan_idx on public.user_profiles (plan);
 create index if not exists user_profiles_ultimate_until_idx on public.user_profiles (ultimate_until);
 
