@@ -11,8 +11,6 @@ import { useEntitlements } from '@/hooks/useEntitlements';
 import { useSettings } from '@/hooks/useSettings';
 import { t } from '@/lib/i18n';
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api` : '/api';
-
 type BeatResponse = {
     title?: string;
     duration_seconds?: number | null;
@@ -66,7 +64,7 @@ export default function BeatPage() {
         try {
             const qs = new URLSearchParams();
             qs.set('lang', lang);
-            const res = await fetch(`${API_BASE}/beat?${qs.toString()}`, {
+            const res = await fetch(`/api/beat?${qs.toString()}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -215,4 +213,3 @@ export default function BeatPage() {
         </main>
     );
 }
-

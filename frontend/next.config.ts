@@ -1,13 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Static export for Docker deployments
-  // Outputs static HTML/CSS/JS to 'out' directory
-  // FastAPI serves these files via StaticFiles middleware
-  output: 'export',
-
-  // Required for static export - disable image optimization
-  // Images will be served as-is without Next.js Image Optimization API
+  // Default: run as a normal Next.js app (supports Route Handlers like /api/* on Vercel).
+  //
+  // If you need static export for a single-container deployment (FastAPI serving frontend/out),
+  // you must remove/disable Route Handlers first.
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -49,8 +46,8 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // NOTE: rewrites() is NOT supported with static export
-  // API calls go directly to NEXT_PUBLIC_BACKEND_URL from client-side
+  // API calls can be served by Next Route Handlers under /api/* (recommended on Vercel),
+  // or by an external backend if you set NEXT_PUBLIC_BACKEND_URL in the browser env.
 };
 
 export default nextConfig;

@@ -12,8 +12,6 @@ import { useEntitlements } from '@/hooks/useEntitlements';
 import { useSettings } from '@/hooks/useSettings';
 import { t } from '@/lib/i18n';
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api` : '/api';
-
 function UltimateChip() {
     return (
         <span className="inline-flex items-center rounded-full border border-[var(--panel-border)] bg-[var(--panel)] px-2 py-0.5 text-[10px] font-mono leading-none">
@@ -78,7 +76,7 @@ export default function SubscriptionsPage() {
         }
         setPromoBusy(true);
         try {
-            const res = await fetch(`${API_BASE}/promo/redeem`, {
+            const res = await fetch(`/api/promo/redeem`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
