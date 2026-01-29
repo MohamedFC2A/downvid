@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { InsightsPanel } from "@/components/modules/ai/InsightsPanel";
 import { QualitySelector, type VideoFormat } from "@/components/QualitySelector";
 import { analyzeVideo, getFileDownloadUrl, type AnalyzeResult } from "@/lib/api";
@@ -171,9 +172,14 @@ export default function ToolPage() {
                     </p>
                 </div>
 
-                <Card className="glass-panel rounded-2xl" spotlight={false}>
-                    <div className="p-5 sm:p-6 space-y-4">
-                        <div className="flex flex-col sm:flex-row gap-3">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5 }}
+                >
+                    <Card className="glass-panel rounded-2xl" spotlight={false}>
+                        <div className="p-5 sm:p-6 space-y-4">
+                            <div className="flex flex-col sm:flex-row gap-3">
                             <div
                                 className="flex-1"
                                 onDragOver={(e) => {
@@ -216,8 +222,13 @@ export default function ToolPage() {
                                     )}
                                 </div>
                             </div>
-                            <Button className="h-12 px-6 text-sm font-semibold" onClick={onAnalyze} disabled={isAnalyzing || !url.trim()}>
-                                {isAnalyzing ? "Analyzing..." : "Analyze"}
+                            <Button
+                                className="h-12 px-6 text-sm font-semibold"
+                                onClick={onAnalyze}
+                                disabled={!url.trim()}
+                                isLoading={isAnalyzing}
+                            >
+                                Analyze
                             </Button>
                             <Button
                                 variant="secondary"
@@ -228,20 +239,33 @@ export default function ToolPage() {
                             </Button>
                         </div>
 
-                        {status.status === "error" && (
-                            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-                                {status.error || "Error"}
-                            </div>
-                        )}
-                    </div>
-                </Card>
+                            {status.status === "error" && (
+                                <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                                    {status.error || "Error"}
+                                </div>
+                            )}
+                        </div>
+                    </Card>
+                </motion.div>
 
-                {(videoInfo || isAnalyzing) && (
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                        <div className="lg:col-span-7 space-y-6">
-                            {videoInfo && (
-                                <Card className="glass-panel rounded-2xl overflow-hidden" spotlight={false}>
-                                    <div className="aspect-video relative bg-black/30">
+                <AnimatePresence mode="wait">
+                    {(videoInfo || isAnalyzing) && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            transition={{ duration: 0.5, delay: 0.1 }}
+                            className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start"
+                        >
+                            <div className="lg:col-span-7 space-y-6">
+                                {videoInfo && (
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.95 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ duration: 0.4 }}
+                                    >
+                                        <Card className="glass-panel rounded-2xl overflow-hidden" spotlight={false}>
+                                            <div className="aspect-video relative bg-black/30">
                                         {videoInfo.thumbnail ? (
                                             // eslint-disable-next-line @next/next/no-img-element
                                             <img src={videoInfo.thumbnail} alt={videoInfo.title} className="object-cover w-full h-full opacity-95" />
@@ -251,16 +275,22 @@ export default function ToolPage() {
                                     </div>
                                     <div className="p-4 border-t border-white/10">
                                         <h3 className="text-zinc-100 font-semibold tracking-tight line-clamp-2">{videoInfo.title}</h3>
-                                        {videoInfo.description && (
-                                            <p className="text-zinc-500 text-xs mt-2 line-clamp-3">{videoInfo.description}</p>
-                                        )}
-                                    </div>
-                                </Card>
-                            )}
+                                                {videoInfo.description && (
+                                                    <p className="text-zinc-500 text-xs mt-2 line-clamp-3">{videoInfo.description}</p>
+                                                )}
+                                            </div>
+                                        </Card>
+                                    </motion.div>
+                                )}
 
-                            {!isAnalyzing && videoInfo && (
-                                <Card className="glass-panel rounded-2xl" spotlight={false}>
-                                    <div className="p-5 space-y-4">
+                                {!isAnalyzing && videoInfo && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.4, delay: 0.2 }}
+                                    >
+                                        <Card className="glass-panel rounded-2xl" spotlight={false}>
+                                            <div className="p-5 space-y-4">
                                         <div className="flex items-center justify-between">
                                             <div className="text-sm font-semibold">Quality</div>
                                             <div className="text-[11px] text-zinc-500 font-mono">
@@ -322,22 +352,24 @@ export default function ToolPage() {
                                                     {(status.percent || 0).toFixed(1)}%
                                                 </div>
                                             </div>
-                                        )}
-                                    </div>
-                                </Card>
-                            )}
+                                                )}
+                                            </div>
+                                        </Card>
+                                    </motion.div>
+                                )}
 
-                            {lastError && (
-                                <AiFixPanel stage={lastErrorStage} url={url.trim()} error={lastError} />
-                            )}
-                        </div>
+                                {lastError && (
+                                    <AiFixPanel stage={lastErrorStage} url={url.trim()} error={lastError} />
+                                )}
+                            </div>
 
-                        <div className="lg:col-span-5 space-y-6">
-                            <AdminLogsPanel enabled={showAdmin} />
-                            <InsightsPanel data={analysisData} isLoading={isAnalyzing} />
-                        </div>
-                    </div>
-                )}
+                            <div className="lg:col-span-5 space-y-6">
+                                <AdminLogsPanel enabled={showAdmin} />
+                                <InsightsPanel data={analysisData} isLoading={isAnalyzing} />
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </main>
     );

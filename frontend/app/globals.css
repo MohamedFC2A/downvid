@@ -1,9 +1,8 @@
 @import "tailwindcss";
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
 
 @theme {
-  --font-sans: "Space Grotesk", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Fraunces", "Times New Roman", serif;
+  --font-sans: var(--font-space-grotesk), "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-fraunces), "Times New Roman", serif;
   --font-mono: "Geist Mono", "Courier New", Courier, monospace;
 }
 
