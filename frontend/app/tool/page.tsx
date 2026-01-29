@@ -380,7 +380,13 @@ export default function ToolPage() {
                         <div className="lg:col-span-5 space-y-6">
                             <AdminLogsPanel enabled={showAdmin} />
                             {settings.aiInsightsEnabled && (
-                                <InsightsPanel data={analysisData} isLoading={isAnalyzing} />
+                                <InsightsPanel
+                                    data={analysisData}
+                                    isLoading={isAnalyzing}
+                                    url={url.trim()}
+                                    language={settings.language}
+                                    aiEnabled={settings.aiInsightsEnabled}
+                                />
                             )}
                         </div>
                     </div>

@@ -34,6 +34,18 @@ const EN: Dict = {
     "upscale.unlockHint": "Download a video first to unlock upscaling.",
     "upscale.cta": "✨ AI 4K Upscale",
     "upscale.download4k": "Download 4K",
+
+    "ai.title": "DEEPSEEK INTELLIGENCE",
+    "ai.summarize": "Summarize Video",
+    "ai.summarizing": "Summarizing...",
+    "ai.summary": "Summary",
+    "ai.keyMoments": "Key Moments",
+    "ai.takeaways": "Takeaways",
+    "ai.hashtags": "Hashtags",
+    "ai.copyHashtags": "Copy Hashtags",
+    "ai.copied": "Copied",
+    "ai.sourceTranscript": "Transcript",
+    "ai.sourceMetadata": "Metadata",
 };
 
 const AR: Dict = {
@@ -68,6 +80,18 @@ const AR: Dict = {
     "upscale.unlockHint": "قم بتحميل الفيديو أولاً لتفعيل الترقية.",
     "upscale.cta": "✨ ترقية 4K",
     "upscale.download4k": "تحميل 4K",
+
+    "ai.title": "ذكاء DeepSeek",
+    "ai.summarize": "تلخيص المقطع",
+    "ai.summarizing": "جارٍ التلخيص...",
+    "ai.summary": "الملخص",
+    "ai.keyMoments": "أهم النقاط",
+    "ai.takeaways": "الخلاصة",
+    "ai.hashtags": "هاشتاقات",
+    "ai.copyHashtags": "نسخ الهاشتاقات",
+    "ai.copied": "تم النسخ",
+    "ai.sourceTranscript": "من النص",
+    "ai.sourceMetadata": "من البيانات",
 };
 
 const DICTS: Record<AppLanguage, Dict> = { en: EN, ar: AR };
@@ -86,4 +110,3 @@ export function t(lang: AppLanguage, key: string, vars?: Record<string, string |
         return v === undefined || v === null ? `{${name}}` : String(v);
     });
 }
-

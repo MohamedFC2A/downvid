@@ -5,6 +5,7 @@ import os
 import uuid
 import logging
 import tempfile
+import glob
 from pathlib import Path
 from typing import Any, Iterable, List, Optional
 from pydantic import BaseModel
@@ -407,6 +408,111 @@ class YtDlpService:
             "id": info.get("id"),
             "formats_count": len(formats),
         }
+
+    def _vtt_to_text(self, raw: str) -> str:
+        lines = []
+        for line in (raw or "").splitlines():
+            s = line.strip()
+            if not s:
+                continue
+            if s.upper() == "WEBVTT":
+                continue
+            # timestamps, cues, or styling
+            if "-->" in s:
+                continue
+            if s.isdigit():
+                continue
+            if s.startswith(("NOTE", "STYLE", "REGION")):
+                continue
+            # remove simple HTML tags
+            s = re.sub(r"<[^>]+>", "", s).strip()
+            if not s:
+                continue
+            lines.append(s)
+        # collapse duplicates / keep readable
+        text = " ".join(lines)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+
+    async def get_transcript_text(self, url: str, *, lang: str = "ar") -> Optional[str]:
+        """
+        Best-effort transcript extraction using yt-dlp subtitles/automatic captions.
+        Returns plain text or None if unavailable.
+        """
+        loop = asyncio.get_running_loop()
+        lang_norm = (lang or "").strip().lower()
+        prefer = []
+        if lang_norm.startswith("ar"):
+            prefer = ["ar", "ar.*", "en", "en.*"]
+        else:
+            prefer = ["en", "en.*", "ar", "ar.*"]
+
+        ydl_opts = {
+            "quiet": True,
+            "noplaylist": True,
+            "ignoreerrors": False,
+            "skip_download": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": prefer,
+            "subtitlesformat": "vtt/best",
+            **self._common_ydl_opts(),
+        }
+
+        tmp_cookie = None
+        env_cookie_path = (os.getenv("YTDLP_COOKIES_PATH") or "").strip()
+        env_cookie_b64 = (os.getenv("YTDLP_COOKIES_B64") or "").strip()
+        cookies_path = Path(env_cookie_path) if env_cookie_path else Path("backend/cookies.txt")
+        if not cookies_path.exists():
+            cookies_path = Path("cookies.txt")
+        if cookies_path.exists():
+            ydl_opts["cookiefile"] = str(cookies_path)
+        elif env_cookie_b64:
+            try:
+                import base64
+
+                tmp_cookie = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+                tmp_cookie.write(base64.b64decode(env_cookie_b64))
+                tmp_cookie.flush()
+                ydl_opts["cookiefile"] = tmp_cookie.name
+            except Exception:
+                tmp_cookie = None
+
+        def _download_subs() -> Optional[str]:
+            with tempfile.TemporaryDirectory() as td:
+                outtmpl = os.path.join(td, "%(id)s.%(ext)s")
+                local_opts = {**ydl_opts, "outtmpl": outtmpl}
+                with yt_dlp.YoutubeDL(local_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    # Trigger subtitle writing
+                    ydl.download([url])
+
+                # Find any VTT written
+                vtts = glob.glob(os.path.join(td, "*.vtt"))
+                if not vtts:
+                    return None
+                # Pick the largest VTT (usually the main transcript)
+                vtts.sort(key=lambda p: os.path.getsize(p), reverse=True)
+                try:
+                    raw = Path(vtts[0]).read_text(encoding="utf-8", errors="ignore")
+                except Exception:
+                    raw = Path(vtts[0]).read_text(errors="ignore")
+                return self._vtt_to_text(raw)
+
+        try:
+            text = await loop.run_in_executor(None, _download_subs)
+            if not text:
+                return None
+            # Avoid gigantic payloads
+            return text[:25000]
+        except Exception:
+            return None
+        finally:
+            if tmp_cookie:
+                try:
+                    os.unlink(tmp_cookie.name)
+                except Exception:
+                    pass
 
     async def download_video(
         self,

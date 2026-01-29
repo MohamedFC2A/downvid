@@ -75,6 +75,21 @@ class AnalyzeResponse(BaseModel):
     available_formats: List[VideoFormat]
     audio_formats: List[VideoFormat]
 
+class SummarizeRequest(BaseModel):
+    url: str
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url3(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("URL is required")
+        if len(v) > 2048:
+            raise ValueError("URL is too long")
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return v
+
 
 class DiagnoseRequest(BaseModel):
     stage: str
@@ -211,6 +226,43 @@ async def analyze_video(request: AnalyzeRequest, ai: bool = True, lang: str = "a
                 ),
             )
         raise HTTPException(status_code=400, detail=msg)
+
+
+@router.post("/summarize")
+async def summarize_video(req: SummarizeRequest, ai: bool = True, lang: str = "ar"):
+    """
+    User-triggered "Summarize video" action.
+    Best-effort: tries transcript via yt-dlp subtitles; falls back to metadata.
+    """
+    info = await ytdlp_service.get_video_info(req.url)
+    title = info.get("title") or "Video"
+    description = info.get("description") or ""
+
+    lang_norm = (lang or "ar").strip().lower()
+    if lang_norm not in ("ar", "en"):
+        lang_norm = "ar"
+
+    transcript_text = await ytdlp_service.get_transcript_text(req.url, lang=lang_norm)
+    if not ai:
+        return {
+            "source": "metadata_fallback",
+            "summary": [],
+            "key_moments": [],
+            "takeaways": [],
+            "hashtags": [],
+            "topics": [],
+            "notes": "AI disabled",
+        }
+
+    result = await deepseek_service.summarize_video(
+        title=title,
+        description=description,
+        transcript_text=transcript_text,
+        lang=lang_norm,
+    )
+    result["title"] = title
+    result["has_transcript"] = bool(transcript_text)
+    return result
 
 
 @router.get("/admin/logs")
