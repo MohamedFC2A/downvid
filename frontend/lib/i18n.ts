@@ -97,7 +97,6 @@ const EN: Dict = {
     "tool.previewHidden": "Preview hidden (Data Saver)",
     "tool.noPreview": "No Preview",
     "tool.disableDataSaver": "Disable Data Saver",
-    "tool.platformBeta": "Platform icon (BETA • coming soon)",
 
     "quality.notAvailable": "Not available",
 };
@@ -197,7 +196,6 @@ const AR: Dict = {
     "tool.previewHidden": "المعاينة مخفية (توفير البيانات)",
     "tool.noPreview": "لا توجد معاينة",
     "tool.disableDataSaver": "إيقاف توفير البيانات",
-    "tool.platformBeta": "أيقونة المنصة (BETA • قريباً)",
 
     "quality.notAvailable": "مش متاح",
 };

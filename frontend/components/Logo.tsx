@@ -13,7 +13,7 @@ export const Logo = () => {
                 </div>
             </div>
             <span className="hidden sm:inline-flex rounded-full border border-[var(--panel-border)] bg-[var(--panel)] px-2.5 py-1 text-[10px] uppercase tracking-[0.28em] text-[var(--foreground)] opacity-70 font-mono">
-                Enterprise
+                BEAT
             </span>
         </div>
     );

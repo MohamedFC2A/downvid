@@ -266,9 +266,6 @@ export default function ToolPage() {
                             <div className="text-[11px] text-zinc-500 font-mono">
                                 {platformDetected ? `${platformDetected}` : ""}
                             </div>
-                            <Button variant="secondary" className="h-8 px-3 text-[11px]" disabled>
-                                {t(lang, "tool.platformBeta")}
-                            </Button>
                         </div>
 
                         {status.status === "error" && (
