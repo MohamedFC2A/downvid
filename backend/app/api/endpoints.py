@@ -220,7 +220,7 @@ async def analyze_video(
         if ai and settings.SUPABASE_ENABLED:
             user_id = require_user_id(authorization)
             profile = await supabase_service.get_or_create_profile(user_id)
-            require_ultimate(profile.plan)
+            require_ultimate(profile.ai_enabled)
 
         # 1. Get Metadata & Formats
         info = await ytdlp_service.get_video_info(request.url)
@@ -326,7 +326,7 @@ async def summarize_video(
     if settings.SUPABASE_ENABLED:
         user_id = require_user_id(authorization)
         profile = await supabase_service.get_or_create_profile(user_id)
-        require_ultimate(profile.plan)
+        require_ultimate(profile.ai_enabled)
 
     result = await deepseek_service.summarize_video(
         title=title,
@@ -382,7 +382,7 @@ async def ai_diagnose(req: DiagnoseRequest, authorization: str | None = Header(d
     if settings.SUPABASE_ENABLED:
         user_id = require_user_id(authorization)
         profile = await supabase_service.get_or_create_profile(user_id)
-        require_ultimate(profile.plan)
+        require_ultimate(profile.ai_enabled)
     if not settings.DEEPSEEK_API_KEY:
         raise HTTPException(status_code=503, detail="DEEPSEEK_API_KEY is not configured on the server")
     # Attach a small amount of recent admin logs for context (sanitized)
@@ -446,7 +446,7 @@ async def upscale_start(payload: UpscaleRequest, request: Request, authorization
     if settings.SUPABASE_ENABLED:
         user_id = require_user_id(authorization)
         profile = await supabase_service.get_or_create_profile(user_id)
-        require_ultimate(profile.plan)
+        require_ultimate(profile.ai_enabled)
 
     source_url = (payload.video_url or "").strip()
     if not source_url:
@@ -476,7 +476,7 @@ async def upscale_status(prediction_id: str, authorization: str | None = Header(
     if settings.SUPABASE_ENABLED:
         user_id = require_user_id(authorization)
         profile = await supabase_service.get_or_create_profile(user_id)
-        require_ultimate(profile.plan)
+        require_ultimate(profile.ai_enabled)
     try:
         prediction = await replicate_upscale_service.get_prediction(prediction_id)
         raw_status = prediction.get("status")
@@ -547,10 +547,11 @@ async def get_me(authorization: str | None = Header(default=None)):
     return {
         "supabase_enabled": True,
         "user_id": profile.user_id,
-        "plan": profile.plan,
+        "plan": profile.effective_plan,
         "downloads_used": profile.downloads_used,
         "downloads_remaining": profile.downloads_remaining,
         "ai_enabled": profile.ai_enabled,
+        "ultimate_until": profile.ultimate_until,
     }
 
 
@@ -567,10 +568,35 @@ async def admin_set_plan(payload: AdminSetPlanRequest, x_admin_token: str | None
         profile = await supabase_service.set_plan(user_id=payload.user_id, plan=payload.plan)
         return {
             "user_id": profile.user_id,
-            "plan": profile.plan,
+            "plan": profile.effective_plan,
             "downloads_used": profile.downloads_used,
             "downloads_remaining": profile.downloads_remaining,
             "ai_enabled": profile.ai_enabled,
+            "ultimate_until": profile.ultimate_until,
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class PromoRedeemRequest(BaseModel):
+    code: str
+
+
+@router.post("/promo/redeem")
+async def redeem_promo(payload: PromoRedeemRequest, authorization: str | None = Header(default=None)):
+    if not settings.SUPABASE_ENABLED:
+        return {"success": True, "message": "Supabase disabled", "plan": "ultimate", "ultimate_until": None}
+
+    user_id = require_user_id(authorization)
+    result = await supabase_service.redeem_promo_code(user_id=user_id, code=(payload.code or "").strip())
+    # Return fresh entitlements after redeem attempt
+    profile = await supabase_service.get_or_create_profile(user_id)
+    return {
+        "success": bool(result.get("success")),
+        "message": result.get("message") or "",
+        "plan": profile.effective_plan,
+        "ai_enabled": profile.ai_enabled,
+        "ultimate_until": profile.ultimate_until,
+        "downloads_used": profile.downloads_used,
+        "downloads_remaining": profile.downloads_remaining,
+    }

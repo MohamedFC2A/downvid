@@ -53,7 +53,6 @@ def require_user_id(authorization: Optional[str]) -> str:
     return user_id
 
 
-def require_ultimate(plan: str) -> None:
-    if (plan or "").strip().lower() != "ultimate":
+def require_ultimate(ai_enabled: bool) -> None:
+    if not ai_enabled:
         raise HTTPException(status_code=403, detail="Ultimate subscription required")
-

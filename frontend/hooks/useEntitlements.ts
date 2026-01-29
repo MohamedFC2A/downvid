@@ -11,6 +11,7 @@ export type Entitlements = {
     plan: 'free' | 'ultimate' | 'unknown';
     downloadsUsed: number | null;
     downloadsRemaining: number | null; // null => unlimited / unknown
+    ultimateUntil: string | null;
     aiEnabled: boolean;
     refresh: () => Promise<void>;
 };
@@ -22,6 +23,7 @@ export function useEntitlements(): Entitlements {
     const [plan, setPlan] = useState<Entitlements['plan']>('unknown');
     const [downloadsUsed, setDownloadsUsed] = useState<number | null>(null);
     const [downloadsRemaining, setDownloadsRemaining] = useState<number | null>(null);
+    const [ultimateUntil, setUltimateUntil] = useState<string | null>(null);
     const [aiEnabled, setAiEnabled] = useState(false);
 
     const headers = useMemo(() => {
@@ -53,11 +55,13 @@ export function useEntitlements(): Entitlements {
             const remaining = json?.downloads_remaining;
             setDownloadsRemaining(typeof remaining === 'number' ? remaining : null);
             setAiEnabled(Boolean(json?.ai_enabled));
+            setUltimateUntil(typeof json?.ultimate_until === 'string' ? json.ultimate_until : null);
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to load subscription');
             setPlan('unknown');
             setDownloadsUsed(null);
             setDownloadsRemaining(null);
+            setUltimateUntil(null);
             setAiEnabled(false);
         } finally {
             setLoading(false);
@@ -74,6 +78,7 @@ export function useEntitlements(): Entitlements {
         plan,
         downloadsUsed,
         downloadsRemaining,
+        ultimateUntil,
         aiEnabled,
         refresh,
     };

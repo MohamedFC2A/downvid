@@ -51,6 +51,13 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
+### 3.1) Promo codes (Ultimate for 30 days)
+Add codes in Supabase SQL Editor (example):
+```sql
+insert into public.promo_codes (code, duration_days, active)
+values ('DOWNVID-ULTIMATE-30', 30, true);
+```
+
 ### 4) Google Sign-in (OAuth)
 In Google Cloud Console, set **Authorized redirect URIs** to:
 `https://rbihfnliubohjjmkssyi.supabase.co/auth/v1/callback`

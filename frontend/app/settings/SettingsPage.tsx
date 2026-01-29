@@ -86,6 +86,11 @@ export function SettingsPage() {
                                 <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.languageKicker')}</div>
                                 <h2 className="text-lg font-semibold text-[var(--foreground)] mt-2">{t(lang, 'settings.languageTitle')}</h2>
                             </div>
+                            <LanguageSwitch
+                                value={settings.language}
+                                onChange={(v) => updateSettings({ language: v })}
+                                disabled={!ready}
+                            />
                             <div className="space-y-4">
                                 {languageOptions.map((option) => (
                                     <button
@@ -246,8 +251,8 @@ function ToggleRow({
     rtl?: boolean;
 }) {
     return (
-        <div className="flex items-center justify-between gap-4">
-            <div>
+        <div className={`flex items-center justify-between gap-4 ${rtl ? 'flex-row-reverse' : ''}`}>
+            <div className={rtl ? 'text-right' : ''}>
                 <div className="text-sm font-semibold text-[var(--foreground)]">{label}</div>
                 <div className="text-xs text-[var(--foreground)] opacity-60 mt-1">{description}</div>
             </div>
@@ -267,6 +272,46 @@ function ToggleRow({
                     }`}
                 />
             </button>
+        </div>
+    );
+}
+
+function LanguageSwitch({
+    value,
+    onChange,
+    disabled,
+}: {
+    value: AppLanguage;
+    onChange: (v: AppLanguage) => void;
+    disabled?: boolean;
+}) {
+    const isAr = value === 'ar';
+    return (
+        <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--deep)] p-3">
+            <div className="relative h-11 w-full rounded-xl border border-[var(--panel-border)] bg-[var(--panel)] p-1">
+                <div
+                    className="absolute top-1 bottom-1 w-1/2 rounded-lg border border-[var(--panel-border)] bg-[var(--accent-soft)] transition-transform"
+                    style={{ transform: isAr ? 'translateX(100%)' : 'translateX(0%)' }}
+                />
+                <div className="relative z-10 grid h-full grid-cols-2">
+                    <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => onChange('en')}
+                        className={`rounded-lg text-sm font-semibold transition-opacity ${!isAr ? 'opacity-100' : 'opacity-65 hover:opacity-90'}`}
+                    >
+                        EN
+                    </button>
+                    <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => onChange('ar')}
+                        className={`rounded-lg text-sm font-semibold transition-opacity ${isAr ? 'opacity-100' : 'opacity-65 hover:opacity-90'}`}
+                    >
+                        AR
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
