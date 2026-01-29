@@ -14,8 +14,10 @@ import { UpscaleButton } from "@/components/UpscaleButton";
 import { useSettings } from "@/hooks/useSettings";
 import { t } from "@/lib/i18n";
 import { PlatformIcon, type PlatformId } from "@/components/PlatformIcon";
+import { clampFormats, clearToolState, loadToolState, saveToolState } from "@/lib/toolState";
 
 const LAST_SELECTION_KEY = "downvid:lastSelection:v1";
+const TOOL_STATE_DEBOUNCE_MS = 500;
 
 export default function ToolPage() {
     const { settings, updateSettings } = useSettings();
@@ -36,6 +38,7 @@ export default function ToolPage() {
     const [lastErrorStage, setLastErrorStage] = useState<"analyze" | "download" | "ws" | "other">("other");
     const [lastError, setLastError] = useState<string>("");
     const isDataSaver = settings.dataSaver;
+    const saveTimerRef = useRef<number | null>(null);
 
     // Auto-Platform Detection
     useEffect(() => {
@@ -64,6 +67,18 @@ export default function ToolPage() {
     const wsRef = useRef<WebSocketClient | null>(null);
 
     useEffect(() => {
+        const restored = loadToolState();
+        if (restored && restored.url) {
+            setUrl(restored.url);
+            setVideoInfo(restored.videoInfo);
+            setAnalysisData(restored.analysisData);
+            setAvailableFormats(restored.availableFormats || []);
+            setAudioFormats(restored.audioFormats || []);
+            setSelectedFormatId(restored.selectedFormatId || null);
+            setDownloadMode(restored.downloadMode || "video");
+            setDownloadedFile(restored.downloadedFile || null);
+        }
+
         wsRef.current = new WebSocketClient(clientId, (data) => {
             setStatus((prev) => ({ ...prev, ...data }));
             if (data.status === "error" && data.error) {
@@ -77,6 +92,37 @@ export default function ToolPage() {
         wsRef.current.connect();
         return () => wsRef.current?.close();
     }, [clientId]);
+
+    useEffect(() => {
+        // Persist tool state so users can navigate away and resume.
+        if (typeof window === "undefined") return;
+        if (saveTimerRef.current) {
+            window.clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = null;
+        }
+        saveTimerRef.current = window.setTimeout(() => {
+            saveToolState({
+                v: 1,
+                savedAt: new Date().toISOString(),
+                url: url.trim(),
+                language: lang,
+                videoInfo,
+                analysisData,
+                availableFormats: clampFormats(availableFormats, 60),
+                audioFormats: clampFormats(audioFormats, 60),
+                selectedFormatId,
+                downloadMode,
+                downloadedFile,
+            });
+        }, TOOL_STATE_DEBOUNCE_MS);
+
+        return () => {
+            if (saveTimerRef.current) {
+                window.clearTimeout(saveTimerRef.current);
+                saveTimerRef.current = null;
+            }
+        };
+    }, [url, lang, videoInfo, analysisData, availableFormats, audioFormats, selectedFormatId, downloadMode, downloadedFile]);
 
     useEffect(() => {
         try {
@@ -260,6 +306,25 @@ export default function ToolPage() {
                                 onClick={() => setShowAdmin((v) => !v)}
                             >
                                 {showAdmin ? t(lang, "tool.hideLogs") : t(lang, "tool.showLogs")}
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                className="h-12 px-6 text-sm"
+                                onClick={() => {
+                                    clearToolState();
+                                    setUrl("");
+                                    setVideoInfo(null);
+                                    setAnalysisData(null);
+                                    setAvailableFormats([]);
+                                    setAudioFormats([]);
+                                    setSelectedFormatId(null);
+                                    setDownloadedFile(null);
+                                    setLastError("");
+                                    setStatus({ status: "idle", percent: 0 });
+                                }}
+                                disabled={!url && !videoInfo && availableFormats.length === 0 && audioFormats.length === 0}
+                            >
+                                {t(lang, "tool.clear")}
                             </Button>
                         </div>
                         <div className="flex items-center justify-between">
