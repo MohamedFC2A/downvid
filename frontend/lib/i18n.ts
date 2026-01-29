@@ -100,6 +100,13 @@ const EN: Dict = {
     "tool.clear": "Clear",
 
     "quality.notAvailable": "Not available",
+    "quality.more": "More details",
+    "quality.less": "Hide details",
+    "quality.size": "Size",
+    "quality.codec": "Codec",
+    "quality.fps": "FPS",
+    "quality.note": "Notes",
+    "quality.ext": "Ext",
 };
 
 const AR: Dict = {
@@ -200,6 +207,13 @@ const AR: Dict = {
     "tool.clear": "مسح",
 
     "quality.notAvailable": "مش متاح",
+    "quality.more": "تفاصيل أكثر",
+    "quality.less": "إخفاء التفاصيل",
+    "quality.size": "الحجم",
+    "quality.codec": "الكودك",
+    "quality.fps": "FPS",
+    "quality.note": "ملاحظات",
+    "quality.ext": "الصيغة",
 };
 
 const DICTS: Record<AppLanguage, Dict> = { en: EN, ar: AR };
