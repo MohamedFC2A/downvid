@@ -957,88 +957,109 @@ class YtDlpService:
         downloads_dir.mkdir(parents=True, exist_ok=True)
         file_token = str(uuid.uuid4())
 
-        payload = await rapidapi_service.fetch_formats_with_fallback(url)
-        video = payload.get("video") or []
-        audio = payload.get("audio") or []
-        candidates = audio if mode == "audio" else video
+        try:
+            payload = await rapidapi_service.fetch_formats_with_fallback(url)
+            video = payload.get("video") or []
+            audio = payload.get("audio") or []
+            candidates = audio if mode == "audio" else video
 
-        chosen = None
-        if format_id:
-            for f in candidates:
-                if f.format_id == format_id:
-                    chosen = f
-                    break
-        if chosen is None and candidates:
-            chosen = candidates[0]
-        if chosen is None:
-            await manager.send_personal_message({"status": "error", "error": "No downloadable formats found (RapidAPI)."}, client_id)
-            raise Exception("No downloadable formats found (RapidAPI)")
+            chosen = None
+            if format_id:
+                for f in candidates:
+                    if f.format_id == format_id:
+                        chosen = f
+                        break
+            if chosen is None and candidates:
+                chosen = candidates[0]
+            if chosen is None:
+                raise Exception("No downloadable formats found (RapidAPI)")
 
-        ext = chosen.extension or ("mp3" if mode == "audio" else "mp4")
-        title = self._safe_filename(payload.get("title") or "video")
-        out_path = downloads_dir / f"{file_token}_{title}.{ext}"
+            ext = chosen.extension or ("mp3" if mode == "audio" else "mp4")
+            title = self._safe_filename(payload.get("title") or "video")
+            out_path = downloads_dir / f"{file_token}_{title}.{ext}"
 
-        await manager.send_personal_message(
-            {"status": "initializing", "percent": 0, "message": "Starting direct download..."},
-            client_id,
-        )
+            await manager.send_personal_message(
+                {"status": "initializing", "percent": 0, "message": "Starting direct download..."},
+                client_id,
+            )
 
-        start = time.time()
-        last_emit = 0.0
-        downloaded = 0
-        total = None
+            start = time.time()
+            last_emit = 0.0
+            downloaded = 0
+            total = None
 
-        import httpx
+            import httpx
 
-        async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
-            async with client.stream("GET", chosen.url) as resp:
-                resp.raise_for_status()
-                cl = resp.headers.get("content-length")
-                try:
-                    total = int(cl) if cl else None
-                except Exception:
-                    total = None
+            headers = {
+                # Some CDN links reject unknown agents.
+                "User-Agent": os.getenv("YTDLP_USER_AGENT")
+                or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            }
 
-                with open(out_path, "wb") as f:
-                    async for chunk in resp.aiter_bytes(chunk_size=1024 * 256):
-                        if not chunk:
-                            continue
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        now = time.time()
-                        if now - last_emit < 0.4:
-                            continue
-                        last_emit = now
-                        elapsed = max(0.001, now - start)
-                        speed_bps = downloaded / elapsed
-                        percent = 0
-                        eta = ""
-                        if total and total > 0:
-                            percent = min(99.9, (downloaded / total) * 100.0)
-                            rem = total - downloaded
-                            eta_s = int(rem / speed_bps) if speed_bps > 0 else 0
-                            eta = f"{eta_s}s" if eta_s < 60 else f"{eta_s//60}m {eta_s%60}s"
-                        await manager.send_personal_message(
-                            {
-                                "status": "downloading",
-                                "percent": float(percent),
-                                "speed": self._format_speed(speed_bps),
-                                "eta": eta,
-                                "downloaded_bytes": downloaded,
-                                "total_bytes": total,
-                            },
-                            client_id,
-                        )
+            async with httpx.AsyncClient(follow_redirects=True, timeout=60.0, headers=headers) as client:
+                async with client.stream("GET", chosen.url) as resp:
+                    resp.raise_for_status()
+                    cl = resp.headers.get("content-length")
+                    try:
+                        total = int(cl) if cl else None
+                    except Exception:
+                        total = None
 
-        await manager.send_personal_message(
-            {
-                "status": "completed",
-                "percent": 100,
-                "file_token": file_token,
-                "filename": out_path.name,
-                "note": "rapidapi",
-            },
-            client_id,
-        )
-        admin_log.add("download_completed", {"client_id": client_id, "label": "rapidapi", "filename": out_path.name})
-        return file_token, str(out_path)
+                    with open(out_path, "wb") as f:
+                        async for chunk in resp.aiter_bytes(chunk_size=1024 * 256):
+                            if not chunk:
+                                continue
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            now = time.time()
+                            if now - last_emit < 0.4:
+                                continue
+                            last_emit = now
+                            elapsed = max(0.001, now - start)
+                            speed_bps = downloaded / elapsed
+                            percent = 0
+                            eta = ""
+                            if total and total > 0:
+                                percent = min(99.9, (downloaded / total) * 100.0)
+                                rem = total - downloaded
+                                eta_s = int(rem / speed_bps) if speed_bps > 0 else 0
+                                eta = f"{eta_s}s" if eta_s < 60 else f"{eta_s//60}m {eta_s%60}s"
+                            await manager.send_personal_message(
+                                {
+                                    "status": "downloading",
+                                    "percent": float(percent),
+                                    "speed": self._format_speed(speed_bps),
+                                    "eta": eta,
+                                    "downloaded_bytes": downloaded,
+                                    "total_bytes": total,
+                                },
+                                client_id,
+                            )
+
+            await manager.send_personal_message(
+                {
+                    "status": "completed",
+                    "percent": 100,
+                    "file_token": file_token,
+                    "filename": out_path.name,
+                    "note": "rapidapi",
+                },
+                client_id,
+            )
+            admin_log.add("download_completed", {"client_id": client_id, "label": "rapidapi", "filename": out_path.name})
+            return file_token, str(out_path)
+        except Exception as e:
+            msg = str(e)
+            admin_log.add("download_error", {"client_id": client_id, "label": "rapidapi", "error": msg})
+            await manager.send_personal_message(
+                {
+                    "status": "error",
+                    "error": (
+                        "RapidAPI download failed. "
+                        "Fix: verify RAPIDAPI_KEY + quota, and retry. "
+                        f"Details: {msg}"
+                    )[:900],
+                },
+                client_id,
+            )
+            raise

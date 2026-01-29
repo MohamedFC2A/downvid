@@ -125,12 +125,24 @@ class RapidApiService:
         headers["x-rapidapi-host"] = (settings.RAPIDAPI_SNAP_HOST or "snap-video3.p.rapidapi.com").strip()
         headers["Content-Type"] = "application/x-www-form-urlencoded"
         async with httpx.AsyncClient() as client:
+            # Try with url form field first.
             res = await client.post(
                 f"{self._snap_base}/download",
                 headers=headers,
                 data={"url": url},
                 timeout=45.0,
             )
+            if res.status_code >= 400:
+                # Some examples on RapidAPI show empty body; retry without body.
+                res2 = await client.post(
+                    f"{self._snap_base}/download",
+                    headers=headers,
+                    data={},
+                    timeout=45.0,
+                )
+                res2.raise_for_status()
+                return res2.json()
+
             res.raise_for_status()
             return res.json()
 
