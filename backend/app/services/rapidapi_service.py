@@ -90,6 +90,7 @@ def _collect_formats(data: Any) -> list[dict[str, Any]]:
 
 class RapidApiService:
     _base = "https://social-download-all-in-one.p.rapidapi.com"
+    _snap_base = "https://snap-video3.p.rapidapi.com"
 
     def _headers(self) -> dict[str, str]:
         key = (settings.RAPIDAPI_KEY or "").strip()
@@ -114,6 +115,53 @@ class RapidApiService:
             )
             res.raise_for_status()
             return res.json()
+
+    async def snap_download(self, url: str) -> dict[str, Any]:
+        """
+        Fallback RapidAPI provider.
+        Note: the correct payload varies per API version; we send `url` as x-www-form-urlencoded.
+        """
+        headers = self._headers()
+        headers["x-rapidapi-host"] = (settings.RAPIDAPI_SNAP_HOST or "snap-video3.p.rapidapi.com").strip()
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+        async with httpx.AsyncClient() as client:
+            res = await client.post(
+                f"{self._snap_base}/download",
+                headers=headers,
+                data={"url": url},
+                timeout=45.0,
+            )
+            res.raise_for_status()
+            return res.json()
+
+    def _extract_any_links(self, data: Any) -> list[str]:
+        links: list[str] = []
+
+        def walk(x: Any):
+            if isinstance(x, dict):
+                for k, v in x.items():
+                    lk = str(k).lower()
+                    if lk in {"url", "link", "download", "download_url", "downloadurl", "video", "video_url", "videourl"} and isinstance(v, str) and v.startswith("http"):
+                        links.append(v)
+                    else:
+                        walk(v)
+            elif isinstance(x, list):
+                for it in x:
+                    walk(it)
+            elif isinstance(x, str):
+                if x.startswith("http") and (".mp4" in x or ".m4a" in x or "video" in x):
+                    links.append(x)
+
+        walk(data)
+        # uniq preserve order
+        out = []
+        seen = set()
+        for u in links:
+            if u in seen:
+                continue
+            seen.add(u)
+            out.append(u)
+        return out
 
     async def fetch_formats(self, url: str) -> dict[str, Any]:
         data = await self.autolink(url)
@@ -174,6 +222,40 @@ class RapidApiService:
             "audio": audio,
         }
 
+    async def fetch_formats_with_fallback(self, url: str) -> dict[str, Any]:
+        """
+        Try autolink first, fall back to snap-video3.
+        The fallback may only provide a single direct link.
+        """
+        try:
+            return await self.fetch_formats(url)
+        except Exception as e1:
+            # Try snap fallback
+            try:
+                data = await self.snap_download(url)
+                links = self._extract_any_links(data)
+                if not links:
+                    raise RuntimeError("snap-video3 returned no links")
+                # Treat as a single "standard" video link
+                v = [
+                    RapidFormat(
+                        format_id="standard",
+                        resolution="Standard",
+                        extension="mp4",
+                        filesize_str="Unknown",
+                        note="snap-video3",
+                        url=links[0],
+                    )
+                ]
+                return {
+                    "title": "Video",
+                    "thumbnail": "",
+                    "platform": "RapidAPI",
+                    "video": v,
+                    "audio": [],
+                }
+            except Exception as e2:
+                raise RuntimeError(f"RapidAPI failed: autolink={e1}; snap={e2}")
+
 
 rapidapi_service = RapidApiService()
-

@@ -18,7 +18,7 @@ import { PlatformIcon, type PlatformId } from "@/components/PlatformIcon";
 const LAST_SELECTION_KEY = "downvid:lastSelection:v1";
 
 export default function ToolPage() {
-    const { settings } = useSettings();
+    const { settings, updateSettings } = useSettings();
     const lang = settings.language;
     const [showAdmin, setShowAdmin] = useState(false);
     const [url, setUrl] = useState("");
@@ -289,8 +289,19 @@ export default function ToolPage() {
                                             // eslint-disable-next-line @next/next/no-img-element
                                             <img src={videoInfo.thumbnail} alt={videoInfo.title} className="object-cover w-full h-full opacity-95" />
                                         ) : (
-                                            <div className="flex items-center justify-center h-full text-zinc-600 font-mono text-xs">
-                                                {isDataSaver ? t(lang, "tool.previewHidden") : t(lang, "tool.noPreview")}
+                                            <div className="flex flex-col items-center justify-center h-full text-zinc-600 font-mono text-xs gap-3 px-4 text-center">
+                                                <div>
+                                                    {isDataSaver ? t(lang, "tool.previewHidden") : t(lang, "tool.noPreview")}
+                                                </div>
+                                                {isDataSaver && (
+                                                    <Button
+                                                        variant="secondary"
+                                                        className="h-8 px-3 text-[11px]"
+                                                        onClick={() => updateSettings({ dataSaver: false })}
+                                                    >
+                                                        {t(lang, "tool.disableDataSaver")}
+                                                    </Button>
+                                                )}
                                             </div>
                                         )}
                                     </div>

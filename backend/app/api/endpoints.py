@@ -214,6 +214,15 @@ async def analyze_video(request: AnalyzeRequest, ai: bool = True, lang: str = "a
     except Exception as e:
         msg = str(e)
         admin_log.add("analyze_error", {"url": request.url, "error": msg})
+        if msg.startswith("RapidAPI provider failed:"):
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "RapidAPI provider failed. "
+                    "Fix: verify RAPIDAPI_KEY, RAPIDAPI_HOST, and RAPIDAPI_SNAP_HOST; "
+                    "check RapidAPI quota/limits; then retry."
+                ),
+            )
         # YouTube bot-check / sign-in challenge
         if "confirm you" in msg.lower() and "not a bot" in msg.lower():
             raise HTTPException(
@@ -304,6 +313,8 @@ async def diagnostics():
         "has_ffmpeg": shutil.which("ffmpeg") is not None,
         "download_provider": (settings.DOWNLOAD_PROVIDER or "ytdlp"),
         "rapidapi_configured": bool((settings.RAPIDAPI_KEY or "").strip()),
+        "rapidapi_host": (settings.RAPIDAPI_HOST or ""),
+        "rapidapi_snap_host": (settings.RAPIDAPI_SNAP_HOST or ""),
         "cookies_env_set": bool(env_cookie_b64 or env_cookie_path),
         "cookies_file_found": has_cookie_file,
         "proxy_set": bool((os.getenv("YTDLP_PROXY") or "").strip()),

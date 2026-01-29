@@ -23,6 +23,7 @@ class Settings:
     # RapidAPI (social-download-all-in-one)
     RAPIDAPI_KEY: str = os.getenv("RAPIDAPI_KEY", "")
     RAPIDAPI_HOST: str = os.getenv("RAPIDAPI_HOST", "social-download-all-in-one.p.rapidapi.com")
+    RAPIDAPI_SNAP_HOST: str = os.getenv("RAPIDAPI_SNAP_HOST", "snap-video3.p.rapidapi.com")
 
     # Download/info provider: "ytdlp" (default) or "rapidapi"
     DOWNLOAD_PROVIDER: str = os.getenv("DOWNLOAD_PROVIDER", "ytdlp")

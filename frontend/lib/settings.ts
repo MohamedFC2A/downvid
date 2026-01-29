@@ -40,14 +40,12 @@ export function loadSettings(): AppSettings {
 
             const connection = (navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
             const saveData = Boolean(connection?.saveData);
-            const effective = (connection?.effectiveType || '').toLowerCase();
-            const slow = effective === '2g' || effective === 'slow-2g';
 
             return {
                 ...defaultSettings,
                 theme: prefersLight ? 'light' : 'midnight',
                 reducedMotion: prefersReducedMotion,
-                dataSaver: saveData || slow,
+                dataSaver: saveData,
                 language,
             };
         }

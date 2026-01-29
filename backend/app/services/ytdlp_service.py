@@ -223,9 +223,10 @@ class YtDlpService:
 
     async def get_video_info(self, url: str):
         # Prefer RapidAPI provider when enabled (avoids YouTube anti-bot/cookies issues).
-        if (settings.DOWNLOAD_PROVIDER or "").strip().lower() == "rapidapi":
+        provider = (settings.DOWNLOAD_PROVIDER or "").strip().lower()
+        if provider == "rapidapi":
             try:
-                payload = await rapidapi_service.fetch_formats(url)
+                payload = await rapidapi_service.fetch_formats_with_fallback(url)
                 available_formats = [
                     VideoFormat(
                         format_id=f.format_id,
@@ -266,7 +267,9 @@ class YtDlpService:
                 }
             except Exception as e:
                 admin_log.add("rapidapi_error", {"stage": "get_video_info", "error": str(e)})
-                # Fall back to yt-dlp if RapidAPI fails (misconfig/limits)
+                # When rapidapi is selected explicitly, do not fall back to yt-dlp
+                # (avoids triggering YouTube anti-bot/cookies failures).
+                raise Exception(f"RapidAPI provider failed: {e}")
 
         loop = asyncio.get_running_loop()
         # Cookies can be required for some YouTube flows (consent/age/region).
@@ -954,7 +957,7 @@ class YtDlpService:
         downloads_dir.mkdir(parents=True, exist_ok=True)
         file_token = str(uuid.uuid4())
 
-        payload = await rapidapi_service.fetch_formats(url)
+        payload = await rapidapi_service.fetch_formats_with_fallback(url)
         video = payload.get("video") or []
         audio = payload.get("audio") or []
         candidates = audio if mode == "audio" else video
