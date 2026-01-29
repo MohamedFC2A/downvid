@@ -292,6 +292,26 @@ export default function ToolPage() {
                 iframe.style.display = "none";
                 document.body.appendChild(iframe);
             }
+            iframe.onload = () => {
+                try {
+                    const text = iframe?.contentDocument?.body?.innerText?.trim() || "";
+                    if (!text) return;
+                    const start = text.indexOf("{");
+                    const end = text.lastIndexOf("}");
+                    if (start >= 0 && end > start) {
+                        const jsonText = text.slice(start, end + 1);
+                        const j = JSON.parse(jsonText) as { detail?: unknown; error?: unknown };
+                        const msg = (j?.detail || j?.error || "").toString().trim();
+                        if (msg) setLastError(msg);
+                        return;
+                    }
+                    if (/error|unauthorized|forbidden|blocked|failed/i.test(text)) {
+                        setLastError(text.slice(0, 220));
+                    }
+                } catch {
+                    // ignore - successful downloads won't be readable here.
+                }
+            };
 
             const form = document.createElement("form");
             form.method = "POST";
