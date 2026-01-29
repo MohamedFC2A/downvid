@@ -10,10 +10,13 @@ import { AdminLogsPanel } from "@/components/modules/debug/AdminLogsPanel";
 import { AiFixPanel } from "@/components/modules/debug/AiFixPanel";
 import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
+import { UpscaleButton } from "@/components/UpscaleButton";
+import { useSettings } from "@/hooks/useSettings";
 
 const LAST_SELECTION_KEY = "downvid:lastSelection:v1";
 
 export default function ToolPage() {
+    const { settings } = useSettings();
     const [showAdmin, setShowAdmin] = useState(false);
     const [url, setUrl] = useState("");
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -28,6 +31,7 @@ export default function ToolPage() {
 
     const [lastErrorStage, setLastErrorStage] = useState<"analyze" | "download" | "ws" | "other">("other");
     const [lastError, setLastError] = useState<string>("");
+    const isDataSaver = settings.dataSaver;
 
     // Auto-Platform Detection
     useEffect(() => {
@@ -153,6 +157,30 @@ export default function ToolPage() {
         });
     }
 
+    const platformAccent = platformDetected === 'YouTube'
+        ? 'border-red-500/40 shadow-[0_0_20px_rgba(239,68,68,0.18)] focus-visible:ring-red-400/50'
+        : platformDetected === 'TikTok'
+            ? 'border-cyan-400/40 shadow-[0_0_20px_rgba(34,211,238,0.18)] focus-visible:ring-cyan-400/50'
+            : platformDetected === 'Instagram'
+                ? 'border-pink-400/40 shadow-[0_0_20px_rgba(244,114,182,0.18)] focus-visible:ring-pink-400/50'
+                : platformDetected === 'Facebook'
+                    ? 'border-blue-400/40 shadow-[0_0_20px_rgba(96,165,250,0.18)] focus-visible:ring-blue-400/50'
+                    : platformDetected === 'Twitter'
+                        ? 'border-sky-400/40 shadow-[0_0_20px_rgba(56,189,248,0.18)] focus-visible:ring-sky-400/50'
+                        : '';
+
+    const handleFocus = async () => {
+        if (!settings.autoPaste) return;
+        try {
+            const text = await navigator.clipboard.readText();
+            if (text && /^https?:\/\//i.test(text) && text.trim() !== url.trim()) {
+                setUrl(text.trim());
+            }
+        } catch {
+            // Clipboard access may be blocked.
+        }
+    };
+
     return (
         <main className="min-h-screen pt-28 pb-14 px-4 flex flex-col items-center relative z-10">
             {/* Liquid glass backdrop */}
@@ -190,8 +218,13 @@ export default function ToolPage() {
                                     <Input
                                         value={url}
                                         onChange={(e) => setUrl(e.target.value)}
+                                        onPaste={(e) => {
+                                            const text = e.clipboardData.getData("text");
+                                            if (text) setUrl(text.trim());
+                                        }}
+                                        onFocus={handleFocus}
                                         placeholder="Paste a URL (YouTube, TikTok, Instagram...)"
-                                        className={`h-14 text-lg bg-white/5 border-white/10 focus-visible:ring-cyan-400/50 backdrop-blur-xl transition-all pl-12 pr-12 rounded-xl ${platformDetected ? 'border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.1)]' : ''}`}
+                                        className={`h-14 text-lg bg-white/5 border-white/10 focus-visible:ring-cyan-400/50 backdrop-blur-xl transition-all pl-12 pr-12 rounded-xl ${platformDetected ? platformAccent : ''}`}
                                     />
                                     {/* Platform Icon Indicator */}
                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none transition-colors duration-300">
@@ -242,11 +275,13 @@ export default function ToolPage() {
                             {videoInfo && (
                                 <Card className="glass-panel rounded-2xl overflow-hidden" spotlight={false}>
                                     <div className="aspect-video relative bg-black/30">
-                                        {videoInfo.thumbnail ? (
+                                        {videoInfo.thumbnail && !isDataSaver ? (
                                             // eslint-disable-next-line @next/next/no-img-element
                                             <img src={videoInfo.thumbnail} alt={videoInfo.title} className="object-cover w-full h-full opacity-95" />
                                         ) : (
-                                            <div className="flex items-center justify-center h-full text-zinc-600 font-mono text-xs">No Preview</div>
+                                            <div className="flex items-center justify-center h-full text-zinc-600 font-mono text-xs">
+                                                {isDataSaver ? 'Preview hidden (Data Saver)' : 'No Preview'}
+                                            </div>
                                         )}
                                     </div>
                                     <div className="p-4 border-t border-white/10">
@@ -282,6 +317,11 @@ export default function ToolPage() {
                                                 setDownloadMode(mode);
                                                 persistSelection(mode, id);
                                             }}
+                                        />
+
+                                        <UpscaleButton
+                                            videoUrl={url.trim()}
+                                            disabled={isAnalyzing || !url.trim()}
                                         />
 
                                         <Button

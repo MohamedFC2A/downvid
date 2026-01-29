@@ -1,9 +1,10 @@
 @import "tailwindcss";
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Montserrat:wght@900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
 
 @theme {
   --font-sans: "Space Grotesk", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-display: "Fraunces", "Times New Roman", serif;
+  --font-logo: "Montserrat", "Space Grotesk", sans-serif;
   --font-mono: "Geist Mono", "Courier New", Courier, monospace;
 }
 
@@ -13,6 +14,46 @@
   --ember: #ffb457;
   --glow: #f35b4a;
   --deep: #10121a;
+  --panel: rgba(12, 14, 20, 0.6);
+  --panel-border: rgba(80, 230, 255, 0.2);
+  --accent: #32f7ff;
+  --accent-soft: rgba(50, 247, 255, 0.18);
+}
+
+:root[data-theme="midnight"] {
+  --background: #05060a;
+  --foreground: #f8f7f4;
+  --ember: #ffb457;
+  --glow: #f35b4a;
+  --deep: #10121a;
+  --panel: rgba(10, 12, 18, 0.7);
+  --panel-border: rgba(86, 255, 232, 0.22);
+  --accent: #38bdf8;
+  --accent-soft: rgba(56, 189, 248, 0.18);
+}
+
+:root[data-theme="neon"] {
+  --background: #05050d;
+  --foreground: #eaf6ff;
+  --ember: #32f7ff;
+  --glow: #21ffb1;
+  --deep: #0b0f1e;
+  --panel: rgba(4, 8, 14, 0.7);
+  --panel-border: rgba(64, 255, 226, 0.32);
+  --accent: #32f7ff;
+  --accent-soft: rgba(50, 247, 255, 0.2);
+}
+
+:root[data-theme="light"] {
+  --background: #f5f6f8;
+  --foreground: #0b0f12;
+  --ember: #ff9c50;
+  --glow: #ffd179;
+  --deep: #ffffff;
+  --panel: rgba(255, 255, 255, 0.8);
+  --panel-border: rgba(15, 23, 42, 0.12);
+  --accent: #0ea5e9;
+  --accent-soft: rgba(14, 165, 233, 0.18);
 }
 
 body {
@@ -27,6 +68,12 @@ body {
 /* Base helpers */
 .font-display {
   font-family: var(--font-display);
+}
+
+.logo-text {
+  font-family: var(--font-logo);
+  font-weight: 900;
+  letter-spacing: 0.32em;
 }
 
 /* Custom Utilities */
@@ -108,4 +155,11 @@ body {
 
 .animate-rise {
   animation: rise 0.8s ease both;
+}
+
+:root[data-reduced-motion="true"] * {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }

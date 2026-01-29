@@ -3,23 +3,17 @@ import React from 'react';
 
 export const Logo = () => {
     return (
-        <div className="relative flex justify-center items-center">
-            {/* Import Google Font for the logo */}
-            <style jsx global>{`
-                @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap');
-            `}</style>
-
+        <div className="relative flex items-center gap-3">
             <div className="relative group">
-                {/* Glow effect */}
-                <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-cyan-400 rounded-lg blur opacity-25 group-hover:opacity-75 transition duration-1000 group-hover:duration-200"></div>
-
-                {/* Main Text */}
-                <h1 className="relative text-4xl md:text-5xl font-black tracking-widest bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-cyan-400 to-purple-400 animate-gradient-x"
-                    style={{ fontFamily: "'Orbitron', sans-serif" }}>
+                <div className="absolute -inset-2 rounded-xl bg-gradient-to-r from-fuchsia-500/30 via-cyan-400/30 to-amber-300/30 blur-lg opacity-70 transition duration-700 group-hover:opacity-100" />
+                <h1
+                    className="relative text-3xl md:text-4xl font-black uppercase bg-gradient-to-r from-fuchsia-300 via-cyan-200 to-emerald-200 bg-clip-text text-transparent drop-shadow-[0_0_18px_rgba(56,189,248,0.35)] tracking-[0.35em]"
+                    style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 900 }}
+                >
                     DOWNVID
-                    <span className="text-xs absolute -top-1 -right-4 text-cyan-300 font-mono tracking-normal opacity-70">PREMIUM</span>
                 </h1>
             </div>
+            <span className="text-[10px] uppercase tracking-[0.35em] text-cyan-200/70 font-mono">Enterprise</span>
         </div>
     );
 };
