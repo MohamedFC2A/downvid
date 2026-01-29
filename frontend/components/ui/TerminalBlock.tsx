@@ -15,7 +15,7 @@ export function TerminalBlock({ className, children, title = "TERMINAL", ...prop
                     <div className="h-2.5 w-2.5 rounded-full bg-[var(--foreground)] opacity-15 border border-[var(--panel-border)]" />
                     <div className="h-2.5 w-2.5 rounded-full bg-[var(--foreground)] opacity-15 border border-[var(--panel-border)]" />
                 </div>
-                <div className="text-xs font-mono text-[var(--foreground)] opacity-60 tracking-widest">{title}</div>
+                <div className="text-xs font-mono text-[var(--foreground)] opacity-60">{title}</div>
                 <div className="w-12" /> {/* Spacer for centering */}
             </div>
             <div className="p-4 font-mono text-sm text-[var(--foreground)] opacity-80">

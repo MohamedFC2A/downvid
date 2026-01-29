@@ -8,12 +8,6 @@ import { t } from '@/lib/i18n';
 
 const POLL_INTERVAL_MS = 3000;
 
-const LOG_LINES = [
-    '> Connecting to Neural Net...',
-    '> Upscaling Frames (x4)...',
-    '> Enhancing Details...',
-];
-
 type UpscaleButtonProps = {
     videoUrl: string;
     fileToken?: string;
@@ -69,8 +63,8 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
                 const data = await res.json();
                 if (data.rawStatus === 'failed' || data.rawStatus === 'canceled') {
                     setStatus('failed');
-                    setError(data.error || 'Upscale failed');
-                    setLogs((prev) => [...prev, '> Error: Upscale failed']);
+                    setError(data.error || t(lang, 'upscale.failed'));
+                    setLogs((prev) => [...prev, `> ${t(lang, 'upscale.log.error')}`]);
                     if (pollingRef.current) {
                         window.clearInterval(pollingRef.current);
                         pollingRef.current = null;
@@ -80,7 +74,7 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
                 if (data.status === 'succeeded') {
                     setStatus('succeeded');
                     setOutputUrl(data.output || null);
-                    setLogs((prev) => [...prev, '> Upscale complete. Output secured.']);
+                    setLogs((prev) => [...prev, `> ${t(lang, 'upscale.log.complete')}`]);
                     if (pollingRef.current) {
                         window.clearInterval(pollingRef.current);
                         pollingRef.current = null;
@@ -88,8 +82,8 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
                 }
             } catch (err) {
                 setStatus('failed');
-                setError(err instanceof Error ? err.message : 'Upscale failed');
-                setLogs((prev) => [...prev, '> Error: Upscale failed']);
+                setError(err instanceof Error ? err.message : t(lang, 'upscale.failed'));
+                setLogs((prev) => [...prev, `> ${t(lang, 'upscale.log.error')}`]);
                 if (pollingRef.current) {
                     window.clearInterval(pollingRef.current);
                     pollingRef.current = null;
@@ -103,7 +97,7 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
                 pollingRef.current = null;
             }
         };
-    }, [apiBase, predictionId, status]);
+    }, [apiBase, predictionId, status, lang]);
 
     const startUpscale = async () => {
         if ((!fileToken && !videoUrl) || status === 'processing') return;
@@ -113,7 +107,13 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
         setPredictionId(null);
         setError(null);
 
-        LOG_LINES.forEach((line, index) => {
+        const logLines = [
+            `> ${t(lang, 'upscale.log.connecting')}`,
+            `> ${t(lang, 'upscale.log.upscaling')}`,
+            `> ${t(lang, 'upscale.log.enhancing')}`,
+        ];
+
+        logLines.forEach((line, index) => {
             const timer = window.setTimeout(() => {
                 setLogs((prev) => [...prev, line]);
             }, index * 350);
@@ -139,11 +139,11 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
             const data = await res.json();
             setPredictionId(data.predictionId);
             setStatus('processing');
-            setLogs((prev) => [...prev, `> Prediction ID: ${data.predictionId}`]);
+            setLogs((prev) => [...prev, `> ${t(lang, 'upscale.log.predictionId', { id: data.predictionId })}`]);
         } catch (err) {
             setStatus('failed');
-            setError(err instanceof Error ? err.message : 'Upscale failed');
-            setLogs((prev) => [...prev, '> Error: Upscale failed']);
+            setError(err instanceof Error ? err.message : t(lang, 'upscale.failed'));
+            setLogs((prev) => [...prev, `> ${t(lang, 'upscale.log.error')}`]);
         }
     };
 
@@ -151,12 +151,12 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
         <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--panel)] p-4 space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <div className="text-sm font-semibold text-zinc-100">{t(lang, 'upscale.title')}</div>
-                    <div className="text-xs text-zinc-500">
+                    <div className="text-sm font-semibold text-[var(--foreground)]">{t(lang, 'upscale.title')}</div>
+                    <div className="text-xs text-[var(--foreground)] opacity-60">
                         {t(lang, 'upscale.model')}: {settings.defaultUpscaleModel === 'real-esrgan' ? 'Real-ESRGAN' : 'Video-Enhance'}
                     </div>
                     {!fileToken && (
-                        <div className="text-[11px] text-zinc-500 mt-1">
+                        <div className="text-[11px] text-[var(--foreground)] opacity-60 mt-1">
                             {t(lang, 'upscale.unlockHint')}
                         </div>
                     )}
@@ -187,7 +187,7 @@ export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonPr
             </AnimatePresence>
 
             {status === 'failed' && error && (
-                <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+                <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-xs text-red-700">
                     {error}
                 </div>
             )}

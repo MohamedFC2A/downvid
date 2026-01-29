@@ -11,21 +11,21 @@ interface ProgressBarProps {
 export function ProgressBar({ progress, status, speed, eta }: ProgressBarProps) {
     return (
         <div className="w-full space-y-2 font-mono text-xs">
-            <div className="flex justify-between text-zinc-400 items-end">
-                <span className="uppercase tracking-wider">{status}</span>
-                <span className="text-zinc-500">{[speed, eta].filter(Boolean).join(" • ")}</span>
+            <div className="flex justify-between text-[var(--foreground)] opacity-75 items-end">
+                <span>{status}</span>
+                <span className="opacity-60">{[speed, eta].filter(Boolean).join(" • ")}</span>
             </div>
-            <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+            <div className="h-1.5 w-full bg-[var(--panel)] rounded-full overflow-hidden border border-[var(--panel-border)]">
                 <motion.div
-                    className="h-full bg-white relative"
+                    className="h-full bg-[var(--foreground)] relative"
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
                     transition={{ type: "spring", stiffness: 100, damping: 20 }}
                 >
-                    <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-white/60" />
+                    <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-[var(--foreground)] opacity-60" />
                 </motion.div>
             </div>
-            <div className="text-right text-zinc-500 pt-1">{progress.toFixed(1)}%</div>
+            <div className="text-right text-[var(--foreground)] opacity-60 pt-1">{progress.toFixed(1)}%</div>
         </div>
     );
 }

@@ -6,24 +6,25 @@ import { Logo } from '@/components/Logo';
 import type { AppLanguage, ThemeMode, UpscaleModel } from '@/lib/settings';
 import { t } from '@/lib/i18n';
 
-const themeOptions: Array<{ id: ThemeMode; title: string; desc: string }> = [
-    { id: 'midnight', title: 'Dark Black', desc: 'True black UI with high contrast.' },
-    { id: 'light', title: 'White & Black', desc: 'Clean light UI with crisp contrast.' },
+const themeOptions: Array<{ id: ThemeMode; titleKey: string; descKey: string }> = [
+    { id: 'midnight', titleKey: 'settings.theme.darkTitle', descKey: 'settings.theme.darkDesc' },
+    { id: 'light', titleKey: 'settings.theme.lightTitle', descKey: 'settings.theme.lightDesc' },
 ];
 
-const languageOptions: Array<{ id: AppLanguage; title: string; desc: string }> = [
-    { id: 'ar', title: 'Arabic (AR)', desc: 'RTL layout and Arabic UI labels.' },
-    { id: 'en', title: 'English (EN)', desc: 'LTR layout and English UI labels.' },
+const languageOptions: Array<{ id: AppLanguage; titleKey: string; descKey: string }> = [
+    { id: 'ar', titleKey: 'settings.language.arTitle', descKey: 'settings.language.arDesc' },
+    { id: 'en', titleKey: 'settings.language.enTitle', descKey: 'settings.language.enDesc' },
 ];
 
-const modelOptions: Array<{ id: UpscaleModel; title: string; desc: string }> = [
-    { id: 'real-esrgan', title: 'Real-ESRGAN', desc: 'Sharpness boost for crisp edges.' },
-    { id: 'video-enhance', title: 'Video-Enhance', desc: 'Smoothness-first cinematic polish.' },
+const modelOptions: Array<{ id: UpscaleModel; titleKey: string; descKey: string }> = [
+    { id: 'real-esrgan', titleKey: 'settings.model.realEsrganTitle', descKey: 'settings.model.realEsrganDesc' },
+    { id: 'video-enhance', titleKey: 'settings.model.videoEnhanceTitle', descKey: 'settings.model.videoEnhanceDesc' },
 ];
 
 export function SettingsPage() {
     const { settings, updateSettings, ready } = useSettings();
     const lang = settings.language;
+    const rtl = lang === 'ar';
     const motionDuration = settings.reducedMotion ? 0 : 0.5;
     const motionDelay = settings.reducedMotion ? 0 : 0.1;
 
@@ -38,8 +39,8 @@ export function SettingsPage() {
                     <Logo />
                     <div className="space-y-2">
                         <p className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.35em]"}`}>{t(lang, 'settings.kicker')}</p>
-                        <h1 className="text-3xl md:text-4xl font-semibold text-zinc-100">{t(lang, 'settings.title')}</h1>
-                        <p className="text-zinc-400 max-w-2xl">
+                        <h1 className="text-3xl md:text-4xl font-semibold text-[var(--foreground)]">{t(lang, 'settings.title')}</h1>
+                        <p className="text-[var(--foreground)] opacity-60 max-w-2xl">
                             {t(lang, 'settings.subtitle')}
                         </p>
                     </div>
@@ -50,11 +51,11 @@ export function SettingsPage() {
                         initial={{ opacity: 0, y: 24 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: motionDuration }}
-                        className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
+                        className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[var(--glass-shadow)]"
                     >
                         <div className="mb-6">
                             <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.appearance')}</div>
-                            <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.themeTitle')}</h2>
+                            <h2 className="text-lg font-semibold text-[var(--foreground)] mt-2">{t(lang, 'settings.themeTitle')}</h2>
                         </div>
                         <div className="space-y-4">
                             {themeOptions.map((option) => (
@@ -69,15 +70,15 @@ export function SettingsPage() {
                                             : 'border-[var(--panel-border)] bg-[var(--deep)] hover:opacity-90'
                                     }`}
                                 >
-                                    <div className="text-sm font-semibold text-zinc-100">{option.title}</div>
-                                    <div className="text-xs text-zinc-400 mt-1">{option.desc}</div>
+                                    <div className="text-sm font-semibold text-[var(--foreground)]">{t(lang, option.titleKey)}</div>
+                                    <div className="text-xs text-[var(--foreground)] opacity-60 mt-1">{t(lang, option.descKey)}</div>
                                 </button>
                             ))}
                         </div>
                         <div className="mt-6 border-t border-[var(--panel-border)] pt-6 space-y-6">
                             <div>
                                 <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.languageKicker')}</div>
-                                <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.languageTitle')}</h2>
+                                <h2 className="text-lg font-semibold text-[var(--foreground)] mt-2">{t(lang, 'settings.languageTitle')}</h2>
                             </div>
                             <div className="space-y-4">
                                 {languageOptions.map((option) => (
@@ -92,8 +93,8 @@ export function SettingsPage() {
                                                 : 'border-[var(--panel-border)] bg-[var(--deep)] hover:opacity-90'
                                         }`}
                                     >
-                                        <div className="text-sm font-semibold text-zinc-100">{option.title}</div>
-                                        <div className="text-xs text-zinc-400 mt-1">{option.desc}</div>
+                                        <div className="text-sm font-semibold text-[var(--foreground)]">{t(lang, option.titleKey)}</div>
+                                        <div className="text-xs text-[var(--foreground)] opacity-60 mt-1">{t(lang, option.descKey)}</div>
                                     </button>
                                 ))}
                             </div>
@@ -104,6 +105,7 @@ export function SettingsPage() {
                                 enabled={settings.reducedMotion}
                                 onToggle={() => updateSettings({ reducedMotion: !settings.reducedMotion })}
                                 disabled={!ready}
+                                rtl={rtl}
                             />
                         </div>
                     </motion.section>
@@ -112,11 +114,11 @@ export function SettingsPage() {
                         initial={{ opacity: 0, y: 24 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: motionDuration, delay: motionDelay }}
-                        className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
+                        className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[var(--glass-shadow)]"
                     >
                         <div className="mb-6">
                             <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.network')}</div>
-                            <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.bandwidth')}</h2>
+                            <h2 className="text-lg font-semibold text-[var(--foreground)] mt-2">{t(lang, 'settings.bandwidth')}</h2>
                         </div>
                         <div className="space-y-6">
                             <ToggleRow
@@ -125,6 +127,7 @@ export function SettingsPage() {
                                 enabled={settings.dataSaver}
                                 onToggle={() => updateSettings({ dataSaver: !settings.dataSaver })}
                                 disabled={!ready}
+                                rtl={rtl}
                             />
                             <ToggleRow
                                 label={t(lang, 'settings.autoPaste')}
@@ -132,6 +135,7 @@ export function SettingsPage() {
                                 enabled={settings.autoPaste}
                                 onToggle={() => updateSettings({ autoPaste: !settings.autoPaste })}
                                 disabled={!ready}
+                                rtl={rtl}
                             />
                         </div>
                     </motion.section>
@@ -140,11 +144,11 @@ export function SettingsPage() {
                         initial={{ opacity: 0, y: 24 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: motionDuration, delay: motionDelay * 2 }}
-                        className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
+                        className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[var(--glass-shadow)]"
                     >
                         <div className="mb-6">
                             <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.ai')}</div>
-                            <h2 className="text-lg font-semibold text-zinc-100 mt-2">{t(lang, 'settings.upscaleModelTitle')}</h2>
+                            <h2 className="text-lg font-semibold text-[var(--foreground)] mt-2">{t(lang, 'settings.upscaleModelTitle')}</h2>
                         </div>
                         <div className="space-y-6 mb-6">
                             <ToggleRow
@@ -153,6 +157,7 @@ export function SettingsPage() {
                                 enabled={settings.aiInsightsEnabled}
                                 onToggle={() => updateSettings({ aiInsightsEnabled: !settings.aiInsightsEnabled })}
                                 disabled={!ready}
+                                rtl={rtl}
                             />
                             <ToggleRow
                                 label={t(lang, "settings.aiFix")}
@@ -160,6 +165,7 @@ export function SettingsPage() {
                                 enabled={settings.aiFixEnabled}
                                 onToggle={() => updateSettings({ aiFixEnabled: !settings.aiFixEnabled })}
                                 disabled={!ready}
+                                rtl={rtl}
                             />
                             <ToggleRow
                                 label={t(lang, "settings.aiUpscale")}
@@ -167,6 +173,7 @@ export function SettingsPage() {
                                 enabled={settings.upscaleEnabled}
                                 onToggle={() => updateSettings({ upscaleEnabled: !settings.upscaleEnabled })}
                                 disabled={!ready}
+                                rtl={rtl}
                             />
                         </div>
                         <div className="space-y-4">
@@ -182,8 +189,8 @@ export function SettingsPage() {
                                             : 'border-[var(--panel-border)] bg-[var(--deep)] hover:opacity-90'
                                     }`}
                                 >
-                                    <div className="text-sm font-semibold text-zinc-100">{option.title}</div>
-                                    <div className="text-xs text-zinc-400 mt-1">{option.desc}</div>
+                                    <div className="text-sm font-semibold text-[var(--foreground)]">{t(lang, option.titleKey)}</div>
+                                    <div className="text-xs text-[var(--foreground)] opacity-60 mt-1">{t(lang, option.descKey)}</div>
                                 </button>
                             ))}
                         </div>
@@ -200,18 +207,20 @@ function ToggleRow({
     enabled,
     onToggle,
     disabled,
+    rtl,
 }: {
     label: string;
     description: string;
     enabled: boolean;
     onToggle: () => void;
     disabled?: boolean;
+    rtl?: boolean;
 }) {
     return (
         <div className="flex items-center justify-between gap-4">
             <div>
-                <div className="text-sm font-semibold text-zinc-100">{label}</div>
-                <div className="text-xs text-zinc-500 mt-1">{description}</div>
+                <div className="text-sm font-semibold text-[var(--foreground)]">{label}</div>
+                <div className="text-xs text-[var(--foreground)] opacity-60 mt-1">{description}</div>
             </div>
             <button
                 type="button"
@@ -225,7 +234,7 @@ function ToggleRow({
             >
                 <span
                     className={`inline-flex h-5 w-5 transform items-center justify-center rounded-full bg-[var(--foreground)] shadow transition-all ${
-                        enabled ? 'translate-x-5' : 'translate-x-1'
+                        enabled ? (rtl ? 'translate-x-1' : 'translate-x-5') : (rtl ? 'translate-x-5' : 'translate-x-1')
                     }`}
                 />
             </button>

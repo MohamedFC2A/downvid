@@ -24,6 +24,8 @@ export default function ToolPage() {
     const lang = settings.language;
     const [showAdmin, setShowAdmin] = useState(false);
     const [url, setUrl] = useState("");
+    const [restoredAt, setRestoredAt] = useState<string | null>(null);
+    const [showRestoredBanner, setShowRestoredBanner] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [analysisData, setAnalysisData] = useState<AnalyzeResult["analysis"] | null>(null);
     const [videoInfo, setVideoInfo] = useState<{ title: string; thumbnail?: string; description?: string } | null>(null);
@@ -79,6 +81,10 @@ export default function ToolPage() {
             setSelectedFormatId(restored.selectedFormatId || null);
             setDownloadMode(restored.downloadMode || "video");
             setDownloadedFile(restored.downloadedFile || null);
+            if (restored.savedAt) {
+                setRestoredAt(restored.savedAt);
+                setShowRestoredBanner(true);
+            }
         }
 
         wsRef.current = new WebSocketClient(clientId, (data) => {
@@ -152,7 +158,7 @@ export default function ToolPage() {
 
     async function onAnalyze() {
         const u = url.trim();
-        if (!u) return;
+        if (!u || !isUrlValid) return;
         setIsAnalyzing(true);
         setStatus({ status: "idle", percent: 0 });
         setAnalysisData(null);
@@ -168,14 +174,14 @@ export default function ToolPage() {
             setVideoInfo({
                 title: data.title,
                 thumbnail: data.thumbnail,
-                description: data.description || `Source: ${platformDetected || 'Unknown'}`
+                description: data.description || t(lang, "tool.source", { source: platformDetected || t(lang, "tool.unknown") })
             });
 
             setAnalysisData(data.analysis || null);
             setAvailableFormats(data.available_formats || []);
             setAudioFormats(data.audio_formats || []);
         } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : "Analysis failed";
+            const msg = e instanceof Error ? e.message : t(lang, "tool.analysisFailed");
             setLastErrorStage("analyze");
             setLastError(msg);
             setStatus({ status: "error", percent: 0, error: msg });
@@ -208,11 +214,11 @@ export default function ToolPage() {
             link.remove();
         } catch {
             setLastErrorStage("download");
-            setLastError("Failed to build download URL");
+            setLastError(t(lang, "tool.downloadUrlFailed"));
         }
     }
 
-    const inputAccent = isUrlValid ? 'border-[var(--foreground)] focus-visible:border-[var(--foreground)]' : '';
+    const inputAccent = isUrlValid ? 'border-green-500/45 focus-visible:border-green-600/55' : '';
 
     const handleFocus = async () => {
         if (!settings.autoPaste) return;
@@ -224,6 +230,27 @@ export default function ToolPage() {
         } catch {
             // Clipboard access may be blocked.
         }
+    };
+
+    const pasteFromClipboard = async () => {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (text && /^https?:\/\//i.test(text)) {
+                setUrl(text.trim());
+            }
+        } catch {
+            // Clipboard access may be blocked.
+        }
+    };
+
+    const statusLabel = (s: DownloadStatus["status"]) => {
+        if (s === "idle") return t(lang, "status.idle");
+        if (s === "initializing") return t(lang, "status.initializing");
+        if (s === "downloading") return t(lang, "status.downloading");
+        if (s === "finishing") return t(lang, "status.finishing");
+        if (s === "completed") return t(lang, "status.completed");
+        if (s === "error") return t(lang, "status.error");
+        return s;
     };
 
     return (
@@ -242,6 +269,21 @@ export default function ToolPage() {
 
                 <Card className="glass-panel rounded-2xl" spotlight={false}>
                     <div className="p-5 sm:p-6 space-y-4">
+                        {showRestoredBanner && restoredAt && (
+                            <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] px-4 py-3 flex items-start justify-between gap-3">
+                                <div className="text-sm text-[var(--foreground)] opacity-80">
+                                    {t(lang, "tool.restored", { time: new Date(restoredAt).toLocaleString() })}
+                                </div>
+                                <button
+                                    type="button"
+                                    className="shrink-0 text-xs font-mono text-[var(--foreground)] opacity-60 hover:opacity-90"
+                                    onClick={() => setShowRestoredBanner(false)}
+                                >
+                                    {t(lang, "tool.dismiss")}
+                                </button>
+                            </div>
+                        )}
+
                         <div className="flex flex-col sm:flex-row gap-3">
                             <div
                                 className="flex-1"
@@ -259,19 +301,25 @@ export default function ToolPage() {
                                     <Input
                                         value={url}
                                         onChange={(e) => setUrl(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                void onAnalyze();
+                                            }
+                                        }}
                                         onPaste={(e) => {
                                             const text = e.clipboardData.getData("text");
                                             if (text) setUrl(text.trim());
                                         }}
                                         onFocus={handleFocus}
                                         placeholder={t(lang, "tool.urlPlaceholder")}
-                                        className={`h-14 text-lg bg-[var(--panel)] border-[var(--panel-border)] focus-visible:ring-[var(--accent-soft)] backdrop-blur-xl transition-all pl-12 pr-12 rounded-xl ${inputAccent}`}
+                                        className={`h-14 text-lg bg-[var(--panel)] border-[var(--panel-border)] focus-visible:ring-[var(--accent-soft)] backdrop-blur-xl transition-all pl-12 pr-28 rounded-xl ${inputAccent}`}
                                     />
                                     {/* Platform Icon Indicator */}
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none transition-colors duration-300">
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--foreground)] opacity-55 pointer-events-none transition-colors duration-300">
                                         {platformDetected ? (
-                                            <span className="text-[var(--foreground)]">
-                                                <div className="w-7 h-7 flex items-center justify-center rounded border border-[var(--panel-border)] bg-[var(--deep)]">
+                                            <span className="text-[var(--foreground)] opacity-90">
+                                                <div className="w-7 h-7 flex items-center justify-center rounded border border-[var(--panel-border)] bg-[var(--panel)]">
                                                     <PlatformIcon platform={platformId} className="w-5 h-5" />
                                                 </div>
                                             </span>
@@ -280,16 +328,25 @@ export default function ToolPage() {
                                         )}
                                     </div>
 
-                                    {/* Verified Badge */}
-                                    {platformDetected && (
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-green-400 bg-[var(--panel)] px-2 py-1 rounded-full border border-[var(--panel-border)]">
-                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" /></svg>
-                                            <span className="text-[10px] uppercase font-bold tracking-wider">{t(lang, "tool.verified")}</span>
-                                        </div>
-                                    )}
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            className="h-9 px-3 rounded-lg border border-[var(--panel-border)] bg-[var(--panel)] text-xs font-mono text-[var(--foreground)] opacity-75 hover:opacity-95"
+                                            onClick={() => void pasteFromClipboard()}
+                                        >
+                                            {t(lang, "tool.paste")}
+                                        </button>
+
+                                        {isUrlValid && (
+                                            <div className="inline-flex items-center gap-1.5 rounded-full border border-green-500/25 bg-green-500/10 px-2 py-1">
+                                                <svg className="w-3.5 h-3.5 text-green-600" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" /></svg>
+                                                <span className={`text-[10px] font-bold ${lang === "ar" ? "" : "uppercase tracking-wider"} text-green-700`}>{t(lang, "tool.urlValid")}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                            <Button className="h-12 px-6 text-sm font-semibold" onClick={onAnalyze} disabled={isAnalyzing || !url.trim()}>
+                            <Button className="h-12 px-6 text-sm font-semibold" onClick={onAnalyze} disabled={isAnalyzing || !isUrlValid}>
                                 {isAnalyzing ? t(lang, "tool.analyzing") : t(lang, "tool.analyze")}
                             </Button>
                             <Button
@@ -304,6 +361,8 @@ export default function ToolPage() {
                                 className="h-12 px-6 text-sm"
                                 onClick={() => {
                                     clearToolState();
+                                    setRestoredAt(null);
+                                    setShowRestoredBanner(false);
                                     setUrl("");
                                     setVideoInfo(null);
                                     setAnalysisData(null);
@@ -320,30 +379,48 @@ export default function ToolPage() {
                             </Button>
                         </div>
                         <div className="flex items-center justify-between">
-                            <div className="text-[11px] text-zinc-500 font-mono">
-                                {platformDetected ? `${platformDetected}` : ""}
+                            <div className="text-[11px] font-mono text-[var(--foreground)] opacity-60">
+                                {platformDetected ? t(lang, "tool.platform", { platform: platformDetected }) : isUrlValid ? t(lang, "tool.platform", { platform: t(lang, "tool.detecting") }) : ""}
                             </div>
                         </div>
+                        {urlTrimmed && !isUrlValid && (
+                            <div className="text-xs text-[var(--foreground)] opacity-60">
+                                {t(lang, "tool.invalidUrlHint")}
+                            </div>
+                        )}
 
                         {status.status === "error" && (
-                            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-                                {status.error || "Error"}
+                            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700">
+                                {status.error || t(lang, "status.error")}
                             </div>
                         )}
                     </div>
                 </Card>
+
+                {!videoInfo && !isAnalyzing && (
+                    <Card className="glass-panel rounded-2xl" spotlight={false}>
+                        <div className="p-6 space-y-3">
+                            <div className="text-sm font-semibold text-[var(--foreground)]">{t(lang, "tool.quickStart")}</div>
+                            <div className="text-sm text-[var(--foreground)] opacity-70 space-y-1">
+                                <div>{t(lang, "tool.step1")}</div>
+                                <div>{t(lang, "tool.step2")}</div>
+                                <div>{t(lang, "tool.step3")}</div>
+                            </div>
+                        </div>
+                    </Card>
+                )}
 
                 {(videoInfo || isAnalyzing) && (
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                         <div className="lg:col-span-7 space-y-6">
                             {videoInfo && (
                                 <Card className="glass-panel rounded-2xl overflow-hidden" spotlight={false}>
-                                    <div className="aspect-video relative bg-black/30">
+                                    <div className="aspect-video relative bg-[var(--deep)]">
                                         {videoInfo.thumbnail && !isDataSaver ? (
                                             // eslint-disable-next-line @next/next/no-img-element
                                             <img src={videoInfo.thumbnail} alt={videoInfo.title} className="object-cover w-full h-full opacity-95" />
                                         ) : (
-                                            <div className="flex flex-col items-center justify-center h-full text-zinc-600 font-mono text-xs gap-3 px-4 text-center">
+                                            <div className="flex flex-col items-center justify-center h-full text-[var(--foreground)] opacity-60 font-mono text-xs gap-3 px-4 text-center">
                                                 <div>
                                                     {isDataSaver ? t(lang, "tool.previewHidden") : t(lang, "tool.noPreview")}
                                                 </div>
@@ -359,10 +436,10 @@ export default function ToolPage() {
                                             </div>
                                         )}
                                     </div>
-                                    <div className="p-4 border-t border-white/10">
-                                        <h3 className="text-zinc-100 font-semibold tracking-tight line-clamp-2">{videoInfo.title}</h3>
+                                    <div className="p-4 border-t border-[var(--panel-border)]">
+                                        <h3 className="text-[var(--foreground)] font-semibold tracking-tight line-clamp-2">{videoInfo.title}</h3>
                                         {videoInfo.description && (
-                                            <p className="text-zinc-500 text-xs mt-2 line-clamp-3">{videoInfo.description}</p>
+                                            <p className="text-[var(--foreground)] opacity-60 text-xs mt-2 line-clamp-3">{videoInfo.description}</p>
                                         )}
                                     </div>
                                 </Card>
@@ -373,8 +450,8 @@ export default function ToolPage() {
                                     <div className="p-5 space-y-4">
                                         <div className="flex items-center justify-between">
                                             <div className="text-sm font-semibold">{t(lang, "tool.quality")}</div>
-                                            <div className="text-[11px] text-zinc-500 font-mono">
-                                                WebSocket: {wsRef.current?.isConnected ? t(lang, "tool.wsConnected") : t(lang, "tool.wsReconnecting")}
+                                            <div className="text-[11px] font-mono text-[var(--foreground)] opacity-60">
+                                                {t(lang, "tool.websocket")}: {wsRef.current?.isConnected ? t(lang, "tool.wsConnected") : t(lang, "tool.wsReconnecting")}
                                             </div>
                                         </div>
                                         <QualitySelector
@@ -419,8 +496,8 @@ export default function ToolPage() {
                                             <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-4 space-y-3">
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div>
-                                                        <div className="text-xs uppercase tracking-widest text-zinc-500 font-mono">{t(lang, "tool.ready")}</div>
-                                                        <div className="text-sm font-semibold text-zinc-100 break-all">
+                                                        <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-widest"}`}>{t(lang, "tool.ready")}</div>
+                                                        <div className="text-sm font-semibold text-[var(--foreground)] break-all">
                                                             {downloadedFile.filename || t(lang, "tool.downloadReady")}
                                                         </div>
                                                     </div>
@@ -428,7 +505,7 @@ export default function ToolPage() {
                                                         {t(lang, "tool.downloadFile")}
                                                     </Button>
                                                 </div>
-                                                <div className="text-[11px] text-zinc-500 font-mono break-all">
+                                                <div className="text-[11px] font-mono text-[var(--foreground)] opacity-60 break-all">
                                                     {t(lang, "tool.token")}: {downloadedFile.token}
                                                 </div>
                                             </div>
@@ -436,19 +513,19 @@ export default function ToolPage() {
 
                                         {(status.status === "downloading" || status.status === "finishing" || status.status === "initializing") && (
                                             <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-4">
-                                                <div className="flex justify-between text-zinc-400 text-xs font-mono">
-                                                    <span className="uppercase tracking-wider">{status.status}</span>
-                                                    <span className="text-zinc-500">
+                                                <div className="flex justify-between text-[var(--foreground)] opacity-75 text-xs font-mono">
+                                                    <span className={lang === "ar" ? "" : "uppercase tracking-wider"}>{statusLabel(status.status)}</span>
+                                                    <span className="opacity-70">
                                                         {[status.speed, status.eta].filter(Boolean).join(" • ")}
                                                     </span>
                                                 </div>
-                                                <div className="mt-3 h-1.5 w-full bg-white/10 rounded-full overflow-hidden border border-white/10">
+                                                <div className="mt-3 h-1.5 w-full bg-[var(--panel)] rounded-full overflow-hidden border border-[var(--panel-border)]">
                                                     <div
                                                         className="h-full bg-[var(--foreground)] opacity-90"
                                                         style={{ width: `${Math.max(0, Math.min(100, status.percent || 0))}%` }}
                                                     />
                                                 </div>
-                                                <div className="text-right text-zinc-500 font-mono text-xs pt-2">
+                                                <div className="text-right text-[var(--foreground)] opacity-60 font-mono text-xs pt-2">
                                                     {(status.percent || 0).toFixed(1)}%
                                                 </div>
                                             </div>
