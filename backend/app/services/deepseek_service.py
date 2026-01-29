@@ -3,24 +3,33 @@ import json
 from app.core.config import settings
 
 class DeepSeekService:
-    async def analyze_metadata(self, title: str, description: str):
+    async def analyze_metadata(self, title: str, description: str, *, lang: str = "ar"):
+        lang_norm = (lang or "ar").strip().lower()
+        is_ar = lang_norm.startswith("ar")
+        summary_lang = "Arabic" if is_ar else "English"
         prompt = f"""
         Analyze this video metadata.
         Title: {title}
         Description: {description}
         
         Output a strict JSON with:
-        - 'summary': (2 bullet points in Arabic)
+        - 'summary': (2 bullet points in {summary_lang})
         - 'sentiment': (one word)
         - 'hashtags': (5 tags)
         """
         
         if not settings.DEEPSEEK_API_KEY:
             # Fallback mock for development
+            if is_ar:
+                return {
+                    "summary": ["تحليل تجريبي للفيديو المختار", "المحتوى يبدو تقنياً ومفيداً للمستخدم"],
+                    "sentiment": "Neutral",
+                    "hashtags": ["#demo", "#test", "#video", "#analysis", "#api"],
+                }
             return {
-                "summary": ["تحليل تجريبي للفيديو المختار", "المحتوى يبدو تقنياً ومفيداً للمستخدم"],
+                "summary": ["Demo analysis for the selected video", "Content looks technical and useful"],
                 "sentiment": "Neutral",
-                "hashtags": ["#demo", "#test", "#video", "#analysis", "#api"]
+                "hashtags": ["#demo", "#test", "#video", "#analysis", "#api"],
             }
 
         headers = {
@@ -51,10 +60,16 @@ class DeepSeekService:
                 return json.loads(content)
             except Exception as e:
                 print(f"DeepSeek Error: {e}")
+                if is_ar:
+                    return {
+                        "summary": ["خطأ في الاتصال بخدمة الذكاء الاصطناعي", "يرجى التحقق من مفتاح API"],
+                        "sentiment": "Error",
+                        "hashtags": ["#error", "#api", "#fail"],
+                    }
                 return {
-                    "summary": ["خطأ في الاتصال بخدمة الذكاء الاصطناعي", "يرجى التحقق من مفتاح API"],
+                    "summary": ["AI service connection error", "Please verify the API key"],
                     "sentiment": "Error",
-                    "hashtags": ["#error", "#api", "#fail"]
+                    "hashtags": ["#error", "#api", "#fail"],
                 }
 
     async def diagnose_error(self, *, stage: str, url: str, error: str, context: dict):

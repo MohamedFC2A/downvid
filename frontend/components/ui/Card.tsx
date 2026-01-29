@@ -36,7 +36,7 @@ export function Card({ className, children, spotlight = true, ...props }: CardPr
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
             className={cn(
-                "relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-sm",
+                "relative overflow-hidden rounded-xl border border-[var(--panel-border)] bg-[var(--panel)] text-[var(--foreground)] shadow-sm",
                 className
             )}
             {...props}
@@ -46,7 +46,7 @@ export function Card({ className, children, spotlight = true, ...props }: CardPr
                     className="pointer-events-none absolute -inset-px opacity-0 transition duration-300"
                     style={{
                         opacity,
-                        background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, rgba(255,255,255,0.06), transparent 40%)`,
+                        background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, var(--accent-soft), transparent 40%)`,
                     }}
                 />
             )}

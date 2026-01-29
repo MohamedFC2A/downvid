@@ -3,12 +3,16 @@
 import { motion } from 'framer-motion';
 import { useSettings } from '@/hooks/useSettings';
 import { Logo } from '@/components/Logo';
-import type { ThemeMode, UpscaleModel } from '@/lib/settings';
+import type { AppLanguage, ThemeMode, UpscaleModel } from '@/lib/settings';
 
 const themeOptions: Array<{ id: ThemeMode; title: string; desc: string }> = [
-    { id: 'midnight', title: 'Midnight Black', desc: 'OLED blacks with low-glare depth.' },
-    { id: 'neon', title: 'Neon Cyberpunk', desc: 'Electric accents, high-contrast glow.' },
-    { id: 'light', title: 'Clean Light', desc: 'Bright workspace with crisp contrast.' },
+    { id: 'midnight', title: 'Dark Black', desc: 'True black UI with high contrast.' },
+    { id: 'light', title: 'White & Black', desc: 'Clean light UI with crisp contrast.' },
+];
+
+const languageOptions: Array<{ id: AppLanguage; title: string; desc: string }> = [
+    { id: 'ar', title: 'Arabic (AR)', desc: 'RTL layout and Arabic UI labels.' },
+    { id: 'en', title: 'English (EN)', desc: 'LTR layout and English UI labels.' },
 ];
 
 const modelOptions: Array<{ id: UpscaleModel; title: string; desc: string }> = [
@@ -46,7 +50,7 @@ export function SettingsPage() {
                         initial={{ opacity: 0, y: 24 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: motionDuration }}
-                        className="rounded-3xl border border-cyan-400/20 bg-black/40 backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.4)]"
+                        className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
                     >
                         <div className="mb-6">
                             <div className="text-xs uppercase tracking-[0.3em] text-cyan-200/70">Appearance</div>
@@ -61,8 +65,8 @@ export function SettingsPage() {
                                     onClick={() => updateSettings({ theme: option.id })}
                                     className={`w-full rounded-2xl border px-4 py-4 text-left transition-all ${
                                         settings.theme === option.id
-                                            ? 'border-cyan-300/60 bg-cyan-400/10 shadow-[0_0_25px_rgba(56,189,248,0.2)]'
-                                            : 'border-white/10 bg-white/5 hover:border-cyan-200/40'
+                                            ? 'border-[var(--accent)] bg-[var(--accent-soft)] shadow-[0_0_25px_rgba(56,189,248,0.2)]'
+                                            : 'border-[var(--panel-border)] bg-[var(--deep)] hover:opacity-90'
                                     }`}
                                 >
                                     <div className="text-sm font-semibold text-zinc-100">{option.title}</div>
@@ -70,7 +74,30 @@ export function SettingsPage() {
                                 </button>
                             ))}
                         </div>
-                        <div className="mt-6 border-t border-white/10 pt-6">
+                        <div className="mt-6 border-t border-[var(--panel-border)] pt-6 space-y-6">
+                            <div>
+                                <div className="text-xs uppercase tracking-[0.3em] text-cyan-200/70">Language</div>
+                                <h2 className="text-lg font-semibold text-zinc-100 mt-2">AR / EN</h2>
+                            </div>
+                            <div className="space-y-4">
+                                {languageOptions.map((option) => (
+                                    <button
+                                        key={option.id}
+                                        type="button"
+                                        disabled={!ready}
+                                        onClick={() => updateSettings({ language: option.id })}
+                                        className={`w-full rounded-2xl border px-4 py-4 text-left transition-all ${
+                                            settings.language === option.id
+                                                ? 'border-[var(--accent)] bg-[var(--accent-soft)] shadow-[0_0_25px_rgba(56,189,248,0.2)]'
+                                                : 'border-[var(--panel-border)] bg-[var(--deep)] hover:opacity-90'
+                                        }`}
+                                    >
+                                        <div className="text-sm font-semibold text-zinc-100">{option.title}</div>
+                                        <div className="text-xs text-zinc-400 mt-1">{option.desc}</div>
+                                    </button>
+                                ))}
+                            </div>
+
                             <ToggleRow
                                 label="Reduced Motion"
                                 description="Minimize motion for accessibility."
@@ -85,7 +112,7 @@ export function SettingsPage() {
                         initial={{ opacity: 0, y: 24 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: motionDuration, delay: motionDelay }}
-                        className="rounded-3xl border border-emerald-300/20 bg-black/40 backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.4)]"
+                        className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
                     >
                         <div className="mb-6">
                             <div className="text-xs uppercase tracking-[0.3em] text-emerald-200/70">Network</div>
@@ -113,11 +140,34 @@ export function SettingsPage() {
                         initial={{ opacity: 0, y: 24 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: motionDuration, delay: motionDelay * 2 }}
-                        className="rounded-3xl border border-amber-300/20 bg-black/40 backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.4)]"
+                        className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur-xl p-6 shadow-[0_25px_80px_rgba(0,0,0,0.25)]"
                     >
                         <div className="mb-6">
                             <div className="text-xs uppercase tracking-[0.3em] text-amber-200/70">AI Preferences</div>
                             <h2 className="text-lg font-semibold text-zinc-100 mt-2">Default Upscale Model</h2>
+                        </div>
+                        <div className="space-y-6 mb-6">
+                            <ToggleRow
+                                label="DeepSeek Intelligence"
+                                description="Enable metadata insights (summary, sentiment, hashtags)."
+                                enabled={settings.aiInsightsEnabled}
+                                onToggle={() => updateSettings({ aiInsightsEnabled: !settings.aiInsightsEnabled })}
+                                disabled={!ready}
+                            />
+                            <ToggleRow
+                                label="AI Error Fixer"
+                                description="Enable DeepSeek troubleshooting suggestions on errors."
+                                enabled={settings.aiFixEnabled}
+                                onToggle={() => updateSettings({ aiFixEnabled: !settings.aiFixEnabled })}
+                                disabled={!ready}
+                            />
+                            <ToggleRow
+                                label="AI Upscale"
+                                description="Show AI 4K upscaler and related controls."
+                                enabled={settings.upscaleEnabled}
+                                onToggle={() => updateSettings({ upscaleEnabled: !settings.upscaleEnabled })}
+                                disabled={!ready}
+                            />
                         </div>
                         <div className="space-y-4">
                             {modelOptions.map((option) => (
@@ -128,8 +178,8 @@ export function SettingsPage() {
                                     onClick={() => updateSettings({ defaultUpscaleModel: option.id })}
                                     className={`w-full rounded-2xl border px-4 py-4 text-left transition-all ${
                                         settings.defaultUpscaleModel === option.id
-                                            ? 'border-amber-300/60 bg-amber-300/10 shadow-[0_0_25px_rgba(251,191,36,0.25)]'
-                                            : 'border-white/10 bg-white/5 hover:border-amber-200/40'
+                                            ? 'border-[var(--ember)] bg-[var(--accent-soft)] shadow-[0_0_25px_rgba(251,191,36,0.22)]'
+                                            : 'border-[var(--panel-border)] bg-[var(--deep)] hover:opacity-90'
                                     }`}
                                 >
                                     <div className="text-sm font-semibold text-zinc-100">{option.title}</div>
@@ -169,13 +219,13 @@ function ToggleRow({
                 onClick={onToggle}
                 className={`relative inline-flex h-7 w-12 items-center rounded-full border transition-all ${
                     enabled
-                        ? 'border-cyan-300/60 bg-cyan-400/30'
-                        : 'border-white/10 bg-white/5'
+                        ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                        : 'border-[var(--panel-border)] bg-[var(--deep)]'
                 }`}
             >
                 <span
-                    className={`inline-flex h-5 w-5 transform items-center justify-center rounded-full bg-white shadow transition-all ${
-                        enabled ? 'translate-x-5 shadow-[0_0_12px_rgba(56,189,248,0.5)]' : 'translate-x-1'
+                    className={`inline-flex h-5 w-5 transform items-center justify-center rounded-full bg-[var(--foreground)] shadow transition-all ${
+                        enabled ? 'translate-x-5 shadow-[0_0_12px_rgba(56,189,248,0.4)]' : 'translate-x-1'
                     }`}
                 />
             </button>

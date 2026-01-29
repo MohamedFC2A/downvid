@@ -14,7 +14,7 @@ export function InsightsPanel({ data, isLoading }: InsightsProps) {
     if (isLoading) {
         return (
             <TerminalBlock title="NEURAL ANALYSIS" className="h-[300px]">
-                <div className="flex h-full flex-col justify-between rounded-xl border border-green-500/10 bg-black/30 p-4">
+                <div className="flex h-full flex-col justify-between rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-4">
                     <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.35em] text-zinc-500">
                         <span>DeepSeek V3</span>
                         <span className="rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1 text-[10px] text-green-400">
@@ -34,7 +34,7 @@ export function InsightsPanel({ data, isLoading }: InsightsProps) {
                     </div>
 
                     <div className="space-y-2">
-                        <div className="h-1.5 w-full rounded-full bg-white/5">
+                        <div className="h-1.5 w-full rounded-full bg-[var(--panel)]">
                             <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-green-400/30 via-green-400/60 to-green-400/30 animate-pulse" />
                         </div>
                         <div className="flex justify-between text-[10px] text-zinc-600 font-mono">

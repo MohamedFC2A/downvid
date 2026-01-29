@@ -6,22 +6,26 @@ export type AnalyzeResult = {
     title: string;
     thumbnail?: string;
     description?: string;
-    platform?: string; // Added platform
-    downloads?: {      // Added downloads object
-        video: VideoFormat[];
-        audio: VideoFormat[];
-    };
     analysis: {
         summary: string[];
         sentiment: string;
         hashtags: string[];
-    };
+    } | null;
     available_formats: VideoFormat[];
     audio_formats: VideoFormat[];
 };
 
-export async function analyzeVideo(url: string) {
-    const res = await fetch(`${API_BASE}/analyze`, {
+export async function analyzeVideo(url: string, opts?: { ai?: boolean; lang?: string }) {
+    const qs = new URLSearchParams();
+    if (typeof opts?.ai === "boolean") {
+        qs.set("ai", opts.ai ? "true" : "false");
+    }
+    if (typeof opts?.lang === "string" && opts.lang.trim()) {
+        qs.set("lang", opts.lang.trim());
+    }
+    const endpoint = qs.toString() ? `${API_BASE}/analyze?${qs.toString()}` : `${API_BASE}/analyze`;
+
+    const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),

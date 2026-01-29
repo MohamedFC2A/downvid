@@ -15,9 +15,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" data-theme="midnight" data-reduced-motion="false">
-      <body className="bg-[var(--background)] text-[var(--foreground)] antialiased min-h-screen relative selection:bg-zinc-800 selection:text-white">
+      <body className="bg-[var(--background)] text-[var(--foreground)] antialiased min-h-screen relative selection:bg-[var(--accent-soft)] selection:text-[var(--foreground)]">
         <div className="fixed inset-0 bg-grid-white opacity-5 pointer-events-none z-0" />
-        <div className="fixed inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-0 pointer-events-none" />
+        <div className="fixed inset-0 bg-gradient-to-t from-[var(--background)] via-transparent to-transparent z-0 pointer-events-none" />
         <SettingsSync />
         <Navbar />
         <div className="relative z-10">

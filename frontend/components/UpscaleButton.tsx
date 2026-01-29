@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
 import { useSettings } from '@/hooks/useSettings';
+import { t } from '@/lib/i18n';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -15,11 +16,13 @@ const LOG_LINES = [
 
 type UpscaleButtonProps = {
     videoUrl: string;
+    fileToken?: string;
     disabled?: boolean;
 };
 
-export function UpscaleButton({ videoUrl, disabled }: UpscaleButtonProps) {
+export function UpscaleButton({ videoUrl, fileToken, disabled }: UpscaleButtonProps) {
     const { settings } = useSettings();
+    const lang = settings.language;
     const [status, setStatus] = useState<'idle' | 'starting' | 'processing' | 'succeeded' | 'failed'>('idle');
     const [logs, setLogs] = useState<string[]>([]);
     const [predictionId, setPredictionId] = useState<string | null>(null);
@@ -54,7 +57,7 @@ export function UpscaleButton({ videoUrl, disabled }: UpscaleButtonProps) {
             window.clearInterval(pollingRef.current);
             pollingRef.current = null;
         }
-    }, [videoUrl]);
+    }, [videoUrl, fileToken]);
 
     useEffect(() => {
         if (!predictionId || status !== 'processing') return;
@@ -103,7 +106,7 @@ export function UpscaleButton({ videoUrl, disabled }: UpscaleButtonProps) {
     }, [apiBase, predictionId, status]);
 
     const startUpscale = async () => {
-        if (!videoUrl || status === 'processing') return;
+        if ((!fileToken && !videoUrl) || status === 'processing') return;
         setStatus('starting');
         setLogs([]);
         setOutputUrl(null);
@@ -122,14 +125,15 @@ export function UpscaleButton({ videoUrl, disabled }: UpscaleButtonProps) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    videoUrl,
+                    ...(fileToken ? { fileToken } : { videoUrl }),
                     model: settings.defaultUpscaleModel,
                 }),
             });
 
             if (!res.ok) {
                 const detail = await res.json().catch(() => null);
-                throw new Error(detail?.error || 'Failed to start upscale');
+                const msg = detail?.detail || detail?.error || `Failed to start upscale (${res.status})`;
+                throw new Error(msg);
             }
 
             const data = await res.json();
@@ -144,18 +148,25 @@ export function UpscaleButton({ videoUrl, disabled }: UpscaleButtonProps) {
     };
 
     return (
-        <div className="rounded-2xl border border-amber-300/20 bg-black/30 p-4 space-y-4">
+        <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--panel)] p-4 space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <div className="text-sm font-semibold text-zinc-100">AI 4K Upscale</div>
-                    <div className="text-xs text-zinc-500">Model: {settings.defaultUpscaleModel === 'real-esrgan' ? 'Real-ESRGAN' : 'Video-Enhance'}</div>
+                    <div className="text-sm font-semibold text-zinc-100">{t(lang, 'upscale.title')}</div>
+                    <div className="text-xs text-zinc-500">
+                        {t(lang, 'upscale.model')}: {settings.defaultUpscaleModel === 'real-esrgan' ? 'Real-ESRGAN' : 'Video-Enhance'}
+                    </div>
+                    {!fileToken && (
+                        <div className="text-[11px] text-zinc-500 mt-1">
+                            {t(lang, 'upscale.unlockHint')}
+                        </div>
+                    )}
                 </div>
                 <Button
                     onClick={startUpscale}
                     disabled={disabled || !videoUrl || status === 'processing' || status === 'starting'}
                     className="h-10 px-5 text-sm font-semibold bg-gradient-to-r from-amber-300 via-amber-200 to-yellow-100 text-black shadow-[0_0_30px_rgba(251,191,36,0.25)]"
                 >
-                    ✨ AI 4K Upscale
+                    {t(lang, 'upscale.cta')}
                 </Button>
             </div>
 
@@ -165,8 +176,8 @@ export function UpscaleButton({ videoUrl, disabled }: UpscaleButtonProps) {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -6 }}
-                        transition={{ duration: 0.3 }}
-                        className="rounded-xl border border-white/10 bg-black/60 px-4 py-3 font-mono text-xs text-emerald-200 space-y-1"
+                    transition={{ duration: 0.3 }}
+                        className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] px-4 py-3 font-mono text-xs text-emerald-300 space-y-1"
                     >
                         {logs.map((line, idx) => (
                             <div key={`${line}-${idx}`}>{line}</div>
@@ -193,7 +204,7 @@ export function UpscaleButton({ videoUrl, disabled }: UpscaleButtonProps) {
                     }}
                     className="w-full rounded-xl border border-amber-300/60 bg-gradient-to-r from-amber-300/30 via-yellow-200/30 to-amber-300/30 px-4 py-3 text-sm font-semibold text-amber-100 shadow-[0_0_35px_rgba(251,191,36,0.4)]"
                 >
-                    Download 4K
+                    {t(lang, 'upscale.download4k')}
                 </button>
             )}
         </div>

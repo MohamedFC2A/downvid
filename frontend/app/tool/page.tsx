@@ -12,11 +12,13 @@ import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { UpscaleButton } from "@/components/UpscaleButton";
 import { useSettings } from "@/hooks/useSettings";
+import { t } from "@/lib/i18n";
 
 const LAST_SELECTION_KEY = "downvid:lastSelection:v1";
 
 export default function ToolPage() {
     const { settings } = useSettings();
+    const lang = settings.language;
     const [showAdmin, setShowAdmin] = useState(false);
     const [url, setUrl] = useState("");
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -28,6 +30,7 @@ export default function ToolPage() {
     const [downloadMode, setDownloadMode] = useState<"video" | "audio">("video");
     const [status, setStatus] = useState<DownloadStatus>({ status: "idle", percent: 0 });
     const [platformDetected, setPlatformDetected] = useState<string | null>(null);
+    const [downloadedFile, setDownloadedFile] = useState<{ token: string; filename?: string } | null>(null);
 
     const [lastErrorStage, setLastErrorStage] = useState<"analyze" | "download" | "ws" | "other">("other");
     const [lastError, setLastError] = useState<string>("");
@@ -55,19 +58,7 @@ export default function ToolPage() {
                 setLastError(data.error);
             }
             if (data.status === "completed" && data.file_token) {
-                getFileDownloadUrl(data.file_token)
-                    .then((downloadUrl) => {
-                        const link = document.createElement("a");
-                        link.href = downloadUrl;
-                        link.setAttribute("download", data.filename || "download");
-                        document.body.appendChild(link);
-                        link.click();
-                        link.remove();
-                    })
-                    .catch(() => {
-                        setLastErrorStage("download");
-                        setLastError("Failed to build download URL");
-                    });
+                setDownloadedFile({ token: data.file_token, filename: data.filename });
             }
         });
         wsRef.current.connect();
@@ -105,37 +96,23 @@ export default function ToolPage() {
         setStatus({ status: "idle", percent: 0 });
         setAnalysisData(null);
         setVideoInfo(null);
+        setDownloadedFile(null);
         setAvailableFormats([]);
         setAudioFormats([]);
         setSelectedFormatId(null);
         setLastError("");
 
         try {
-            const data = await analyzeVideo(u);
-            // Updated to handle new response structure: { platform, title, thumbnail, downloads: { video: [], audio: [] } }
+            const data = await analyzeVideo(u, { ai: settings.aiInsightsEnabled, lang: settings.language });
             setVideoInfo({
                 title: data.title,
                 thumbnail: data.thumbnail,
-                description: `Source: ${data.platform || platformDetected || 'Unknown'}`
+                description: data.description || `Source: ${platformDetected || 'Unknown'}`
             });
 
-            // If the API returns the new structure with 'downloads' object
-            if (data.downloads) {
-                setAvailableFormats(data.downloads.video || []);
-                setAudioFormats(data.downloads.audio || []);
-
-                // Reset Selection
-                setSelectedFormatId(null);
-
-                // Intelligent Default Mode Switch
-                if (data.downloads.video.length > 0) setDownloadMode("video");
-                else if (data.downloads.audio.length > 0) setDownloadMode("audio");
-            } else {
-                // Fallback to old behavior if API hasn't updated perfectly or error
-                setAnalysisData(data.analysis);
-                setAvailableFormats(data.available_formats || []);
-                setAudioFormats(data.audio_formats || []);
-            }
+            setAnalysisData(data.analysis || null);
+            setAvailableFormats(data.available_formats || []);
+            setAudioFormats(data.audio_formats || []);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "Analysis failed";
             setLastErrorStage("analyze");
@@ -150,11 +127,28 @@ export default function ToolPage() {
         const u = url.trim();
         if (!u || !wsRef.current) return;
         setLastError("");
+        setDownloadedFile(null);
         setStatus({ status: "initializing", percent: 0, speed: "", eta: "" });
         wsRef.current.sendDownloadSpec(u, {
             mode: downloadMode,
             format_id: selectedFormatId || undefined,
         });
+    }
+
+    async function onDownloadFile() {
+        if (!downloadedFile?.token) return;
+        try {
+            const downloadUrl = await getFileDownloadUrl(downloadedFile.token);
+            const link = document.createElement("a");
+            link.href = downloadUrl;
+            link.setAttribute("download", downloadedFile.filename || "download");
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch {
+            setLastErrorStage("download");
+            setLastError("Failed to build download URL");
+        }
     }
 
     const platformAccent = platformDetected === 'YouTube'
@@ -194,8 +188,8 @@ export default function ToolPage() {
                     <div className="mb-2">
                         <Logo />
                     </div>
-                    <p className="text-zinc-400 text-sm tracking-[0.3em] uppercase font-mono">
-                        Downvid Control Room
+                    <p className="text-[var(--foreground)] opacity-60 text-sm tracking-[0.3em] uppercase font-mono">
+                        {t(lang, "tool.tagline")}
                     </p>
                 </div>
 
@@ -223,8 +217,8 @@ export default function ToolPage() {
                                             if (text) setUrl(text.trim());
                                         }}
                                         onFocus={handleFocus}
-                                        placeholder="Paste a URL (YouTube, TikTok, Instagram...)"
-                                        className={`h-14 text-lg bg-white/5 border-white/10 focus-visible:ring-cyan-400/50 backdrop-blur-xl transition-all pl-12 pr-12 rounded-xl ${platformDetected ? platformAccent : ''}`}
+                                        placeholder={t(lang, "tool.urlPlaceholder")}
+                                        className={`h-14 text-lg bg-[var(--panel)] border-[var(--panel-border)] focus-visible:ring-[var(--accent-soft)] backdrop-blur-xl transition-all pl-12 pr-12 rounded-xl ${platformDetected ? platformAccent : ''}`}
                                     />
                                     {/* Platform Icon Indicator */}
                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none transition-colors duration-300">
@@ -244,20 +238,20 @@ export default function ToolPage() {
                                     {platformDetected && (
                                         <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-green-400 bg-green-950/30 px-2 py-1 rounded-full border border-green-500/20 animate-in fade-in zoom-in duration-300">
                                             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" /></svg>
-                                            <span className="text-[10px] uppercase font-bold tracking-wider">Verified</span>
+                                            <span className="text-[10px] uppercase font-bold tracking-wider">{t(lang, "tool.verified")}</span>
                                         </div>
                                     )}
                                 </div>
                             </div>
                             <Button className="h-12 px-6 text-sm font-semibold" onClick={onAnalyze} disabled={isAnalyzing || !url.trim()}>
-                                {isAnalyzing ? "Analyzing..." : "Analyze"}
+                                {isAnalyzing ? t(lang, "tool.analyzing") : t(lang, "tool.analyze")}
                             </Button>
                             <Button
                                 variant="secondary"
                                 className="h-12 px-6 text-sm"
                                 onClick={() => setShowAdmin((v) => !v)}
                             >
-                                {showAdmin ? "Hide" : "Show"} Logs
+                                {showAdmin ? t(lang, "tool.hideLogs") : t(lang, "tool.showLogs")}
                             </Button>
                         </div>
 
@@ -299,7 +293,7 @@ export default function ToolPage() {
                                         <div className="flex items-center justify-between">
                                             <div className="text-sm font-semibold">Quality</div>
                                             <div className="text-[11px] text-zinc-500 font-mono">
-                                                WebSocket: {wsRef.current?.isConnected ? "connected" : "reconnecting…"}
+                                                WebSocket: {wsRef.current?.isConnected ? t(lang, "tool.wsConnected") : t(lang, "tool.wsReconnecting")}
                                             </div>
                                         </div>
                                         <QualitySelector
@@ -307,6 +301,7 @@ export default function ToolPage() {
                                             audioFormats={audioFormats}
                                             mode={downloadMode}
                                             selectedId={selectedFormatId}
+                                            language={settings.language}
                                             onModeChange={(newMode) => {
                                                 setDownloadMode(newMode);
                                                 setSelectedFormatId(null);
@@ -319,33 +314,47 @@ export default function ToolPage() {
                                             }}
                                         />
 
-                                        <UpscaleButton
-                                            videoUrl={url.trim()}
-                                            disabled={isAnalyzing || !url.trim()}
-                                        />
+                                        {settings.upscaleEnabled && (
+                                            <UpscaleButton
+                                                videoUrl={url.trim()}
+                                                fileToken={downloadedFile?.token || undefined}
+                                                disabled={isAnalyzing || !url.trim() || !downloadedFile?.token}
+                                            />
+                                        )}
 
                                         <Button
                                             onClick={onDownload}
                                             disabled={
-                                                (downloadMode === "video" && availableFormats.length > 0 && !selectedFormatId)
-                                                || (downloadMode === "audio" && audioFormats.length > 0 && !selectedFormatId)
-                                                || status.status === "downloading"
+                                                status.status === "downloading"
                                                 || status.status === "finishing"
                                                 || status.status === "initializing"
                                             }
                                             className="w-full h-12 text-sm font-semibold"
                                         >
-                                            {!selectedFormatId && (
-                                                (downloadMode === "video" && availableFormats.length > 0)
-                                                || (downloadMode === "audio" && audioFormats.length > 0)
-                                            )
-                                                ? "Select a format"
-                                                : "Download Best"
-                                            }
+                                            {selectedFormatId ? t(lang, "tool.downloadSelected") : t(lang, "tool.downloadBest")}
                                         </Button>
 
+                                        {downloadedFile?.token && status.status === "completed" && (
+                                            <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-4 space-y-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <div className="text-xs uppercase tracking-widest text-zinc-500 font-mono">{t(lang, "tool.ready")}</div>
+                                                        <div className="text-sm font-semibold text-zinc-100 break-all">
+                                                            {downloadedFile.filename || t(lang, "tool.downloadReady")}
+                                                        </div>
+                                                    </div>
+                                                    <Button className="h-9 px-4 text-xs" onClick={onDownloadFile}>
+                                                        {t(lang, "tool.downloadFile")}
+                                                    </Button>
+                                                </div>
+                                                <div className="text-[11px] text-zinc-500 font-mono break-all">
+                                                    {t(lang, "tool.token")}: {downloadedFile.token}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {(status.status === "downloading" || status.status === "finishing" || status.status === "initializing") && (
-                                            <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                                            <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-4">
                                                 <div className="flex justify-between text-zinc-400 text-xs font-mono">
                                                     <span className="uppercase tracking-wider">{status.status}</span>
                                                     <span className="text-zinc-500">
@@ -367,14 +376,16 @@ export default function ToolPage() {
                                 </Card>
                             )}
 
-                            {lastError && (
+                            {settings.aiFixEnabled && lastError && (
                                 <AiFixPanel stage={lastErrorStage} url={url.trim()} error={lastError} />
                             )}
                         </div>
 
                         <div className="lg:col-span-5 space-y-6">
                             <AdminLogsPanel enabled={showAdmin} />
-                            <InsightsPanel data={analysisData} isLoading={isAnalyzing} />
+                            {settings.aiInsightsEnabled && (
+                                <InsightsPanel data={analysisData} isLoading={isAnalyzing} />
+                            )}
                         </div>
                     </div>
                 )}

@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Header, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import APIRouter, Header, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import FileResponse
-from starlette.background import BackgroundTask
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import List, Optional
 from pathlib import Path
 from app.api.websocket import manager
@@ -9,9 +8,11 @@ from app.core.config import settings
 from app.core.admin_log import admin_log
 from app.services.ytdlp_service import YtDlpService, VideoFormat
 from app.services.deepseek_service import deepseek_service
+from app.services.replicate_upscale_service import MODEL_MAP, replicate_upscale_service
 import yt_dlp
 import shutil
 import os
+import time
 
 router = APIRouter()
 ytdlp_service = YtDlpService()
@@ -22,6 +23,34 @@ ytdlp_service = YtDlpService()
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "downvid-api"}
+
+
+def _public_base_url(request: Request) -> str:
+    configured = (settings.PUBLIC_BASE_URL or "").strip()
+    if configured:
+        return configured.rstrip("/")
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "http").split(",")[0].strip()
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc).split(",")[0].strip()
+    return f"{proto}://{host}"
+
+
+def _cleanup_old_downloads(downloads_dir: Path) -> None:
+    ttl_hours = int(getattr(settings, "DOWNLOAD_TTL_HOURS", 0) or 0)
+    if ttl_hours <= 0:
+        return
+    cutoff = time.time() - (ttl_hours * 60 * 60)
+    try:
+        for p in downloads_dir.iterdir():
+            if not p.is_file():
+                continue
+            try:
+                if p.stat().st_mtime < cutoff:
+                    p.unlink(missing_ok=True)
+            except Exception:
+                continue
+    except Exception:
+        # Cleanup must never block requests.
+        return
 
 class AnalyzeRequest(BaseModel):
     url: str
@@ -42,7 +71,7 @@ class AnalyzeResponse(BaseModel):
     title: str
     thumbnail: Optional[str]
     description: Optional[str]
-    analysis: dict
+    analysis: Optional[dict]
     available_formats: List[VideoFormat]
     audio_formats: List[VideoFormat]
 
@@ -132,15 +161,20 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         admin_log.add("ws_error", {"client_id": client_id, "error": str(e)})
 
 @router.post("/analyze", response_model=AnalyzeResponse)
-async def analyze_video(request: AnalyzeRequest):
+async def analyze_video(request: AnalyzeRequest, ai: bool = True, lang: str = "ar"):
     try:
         # 1. Get Metadata & Formats
         info = await ytdlp_service.get_video_info(request.url)
         title = info.get('title', 'Unknown Title')
         description = info.get('description', 'No description')
         
-        # 2. AI Process
-        analysis = await deepseek_service.analyze_metadata(title, description)
+        analysis = None
+        if ai:
+            # 2. AI Process
+            lang_norm = (lang or "ar").strip().lower()
+            if lang_norm not in ("ar", "en"):
+                lang_norm = "ar"
+            analysis = await deepseek_service.analyze_metadata(title, description, lang=lang_norm)
         
         admin_log.add(
             "analyze",
@@ -249,10 +283,85 @@ async def ai_diagnose_get(
     req = DiagnoseRequest(stage=stage, url=url, error=error, context={})
     return await ai_diagnose(req)
 
+
+class UpscaleRequest(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    file_token: Optional[str] = Field(default=None, alias="fileToken")
+    video_url: Optional[str] = Field(default=None, alias="videoUrl")
+    model: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate(self):
+        if not (self.file_token or self.video_url):
+            raise ValueError("fileToken or videoUrl is required")
+        return self
+
+
+@router.get("/upscale")
+async def upscale_info():
+    return {
+        "enabled": bool((settings.REPLICATE_API_TOKEN or "").strip()),
+        "models": sorted(list(MODEL_MAP.keys())),
+    }
+
+
+@router.post("/upscale")
+async def upscale_start(payload: UpscaleRequest, request: Request):
+    source_url = (payload.video_url or "").strip()
+    if not source_url:
+        file_token = (payload.file_token or "").strip()
+        if not file_token:
+            raise HTTPException(status_code=400, detail="fileToken or videoUrl is required")
+
+        downloads_dir = Path(settings.DOWNLOADS_DIR)
+        files = sorted(downloads_dir.glob(f"{file_token}_*"))
+        if not files:
+            raise HTTPException(status_code=404, detail="File not found. Download the video first, then upscale using fileToken.")
+
+        base = _public_base_url(request)
+        source_url = f"{base}/api/file/serve/{file_token}"
+
+    try:
+        prediction = await replicate_upscale_service.create_prediction(source_url=source_url, model_key=payload.model)
+        return {"predictionId": prediction.get("id"), "status": prediction.get("status")}
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/upscale/status/{prediction_id}")
+async def upscale_status(prediction_id: str):
+    try:
+        prediction = await replicate_upscale_service.get_prediction(prediction_id)
+        raw_status = prediction.get("status")
+        output = prediction.get("output")
+        if isinstance(output, list) and output:
+            output = output[-1]
+
+        status = "processing"
+        if raw_status == "succeeded":
+            status = "succeeded"
+        elif raw_status in ("failed", "canceled"):
+            status = "failed"
+
+        return {
+            "status": status,
+            "rawStatus": raw_status,
+            "output": output,
+            "error": prediction.get("error"),
+        }
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/file/serve/{file_token}")
 async def serve_file(file_token: str):
     try:
         downloads_dir = Path(settings.DOWNLOADS_DIR)
+        _cleanup_old_downloads(downloads_dir)
         # Look for file in downloads folder starting with token
         files = sorted(downloads_dir.glob(f"{file_token}_*"))
         
@@ -265,18 +374,10 @@ async def serve_file(file_token: str):
         # Let's remove the token prefix for the user implementation: {token}_{title}.ext
         # {file_token}_ prefix length is len(file_token)+1
         download_name = filename[len(file_token)+1:]
-        
-        def cleanup():
-            try:
-                if filepath.exists():
-                    filepath.unlink()
-            except Exception as e:
-                print(f"Error cleaning up {filepath}: {e}")
 
         return FileResponse(
             str(filepath), 
-            filename=download_name, 
-            background=BackgroundTask(cleanup)
+            filename=download_name,
         )
     except Exception as e:
         print(f"Serve error: {e}")

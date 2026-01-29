@@ -83,7 +83,7 @@ export function AiFixPanel({
                     </Button>
                 </div>
 
-                <div className="rounded-xl border border-zinc-800 bg-black/30 p-3">
+                <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-3">
                     <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-mono mb-2">Error</div>
                     <pre className="text-[11px] text-zinc-200 whitespace-pre-wrap break-words">{error}</pre>
                 </div>
@@ -96,7 +96,7 @@ export function AiFixPanel({
 
                 {result && (
                     <div className="space-y-4">
-                        <div className="rounded-xl border border-zinc-800 bg-black/30 p-3">
+                        <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-3">
                             <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-mono mb-1">Root Cause</div>
                             <div className="text-sm text-zinc-100">{result.root_cause || "—"}</div>
                             <div className="text-[11px] text-zinc-500 font-mono mt-1">
@@ -105,7 +105,7 @@ export function AiFixPanel({
                         </div>
 
                         {Array.isArray(result.quick_fixes) && result.quick_fixes.length > 0 && (
-                            <div className="rounded-xl border border-zinc-800 bg-black/30 p-3">
+                            <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-3">
                                 <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-mono mb-2">Quick Fixes</div>
                                 <ul className="space-y-1 text-sm text-zinc-100 list-disc pl-5">
                                     {result.quick_fixes.slice(0, 10).map((x, i) => (
@@ -116,7 +116,7 @@ export function AiFixPanel({
                         )}
 
                         {Array.isArray(result.deep_fixes) && result.deep_fixes.length > 0 && (
-                            <div className="rounded-xl border border-zinc-800 bg-black/30 p-3">
+                            <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-3">
                                 <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-mono mb-2">Deep Fixes</div>
                                 <ul className="space-y-1 text-sm text-zinc-100 list-disc pl-5">
                                     {result.deep_fixes.slice(0, 10).map((x, i) => (
