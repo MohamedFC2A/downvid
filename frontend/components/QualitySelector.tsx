@@ -45,8 +45,8 @@ export function QualitySelector({
                 <button
                     onClick={() => onModeChange('video')}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${mode === 'video'
-                            ? 'bg-white text-black shadow-sm'
-                            : 'text-zinc-400 hover:text-zinc-200'
+                        ? 'bg-white text-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                 >
                     Video
@@ -54,8 +54,8 @@ export function QualitySelector({
                 <button
                     onClick={() => onModeChange('audio')}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${mode === 'audio'
-                            ? 'bg-white text-black shadow-sm'
-                            : 'text-zinc-400 hover:text-zinc-200'
+                        ? 'bg-white text-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                 >
                     Audio
@@ -63,50 +63,55 @@ export function QualitySelector({
             </div>
 
             {/* Format List */}
-            <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800">
+            <div className="max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 pr-2">
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={mode}
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -5 }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="space-y-2"
+                        className="grid grid-cols-1 sm:grid-cols-2 gap-3"
                     >
                         {formats.length === 0 ? (
-                            <div className="text-center text-zinc-500 py-4 text-sm">
-                                No {mode} formats available
+                            <div className="col-span-full text-center text-zinc-500 py-8 text-sm italic">
+                                No {mode} formats detected for this link.
                             </div>
                         ) : (
                             formats.map((fmt) => (
                                 <button
                                     key={fmt.format_id}
                                     onClick={() => handleSelect(fmt.format_id)}
-                                    className={`w-full flex flex-col gap-2 px-4 py-3 rounded-lg text-sm transition-all border ${selectedId === fmt.format_id
-                                            ? 'bg-white text-black border-transparent font-medium'
-                                            : 'bg-black/40 text-zinc-200 border-white/10 hover:border-white/30 hover:bg-white/5'
+                                    className={`relative group flex flex-col justify-between p-4 rounded-xl text-left transition-all duration-300 border backdrop-blur-md ${selectedId === fmt.format_id
+                                        ? 'bg-white/10 border-white/40 shadow-[0_0_20px_rgba(255,255,255,0.15)] scale-[1.02]'
+                                        : 'bg-black/20 border-white/5 hover:bg-white/5 hover:border-white/20'
                                         }`}
                                 >
-                                    <div className="w-full flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-base font-semibold">{fmt.resolution}</span>
+                                    <div className="w-full flex justify-between items-start mb-2">
+                                        <div className="flex flex-col">
+                                            <span className={`text-lg font-bold tracking-tight ${selectedId === fmt.format_id ? 'text-white' : 'text-zinc-200'}`}>
+                                                {fmt.resolution}
+                                            </span>
                                             {fmt.extension && (
-                                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedId === fmt.format_id
-                                                        ? 'bg-black/10 text-black/70'
-                                                        : 'bg-white/10 text-zinc-400'
-                                                    }`}>
-                                                    {fmt.extension.toUpperCase()}
+                                                <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-mono mt-0.5">
+                                                    {fmt.extension}
                                                 </span>
                                             )}
                                         </div>
-                                        <span className={selectedId === fmt.format_id ? 'text-black/70' : 'text-zinc-500'}>
-                                            {fmt.filesize_str}
-                                        </span>
+                                        {selectedId === fmt.format_id && (
+                                            <div className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_cyan]"></div>
+                                        )}
                                     </div>
-                                    <div className={`w-full text-left text-xs ${selectedId === fmt.format_id ? 'text-black/60' : 'text-zinc-500'}`}>
-                                        {[fmt.note, fmt.vcodec, fmt.acodec]
-                                            .filter((val) => val && val !== "none")
-                                            .join(" • ") || "Standard"}
+
+                                    <div className="w-full border-t border-white/5 pt-3 mt-1 flex justify-between items-center text-xs">
+                                        <span className={`font-mono ${selectedId === fmt.format_id ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                                            {fmt.filesize_str || 'N/A'}
+                                        </span>
+                                        {[fmt.vcodec, fmt.acodec].some(c => c && c !== 'none') && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-zinc-400">
+                                                {mode === 'video' ? 'HD' : 'HQ'}
+                                            </span>
+                                        )}
                                     </div>
                                 </button>
                             ))

@@ -6,6 +6,11 @@ export type AnalyzeResult = {
     title: string;
     thumbnail?: string;
     description?: string;
+    platform?: string; // Added platform
+    downloads?: {      // Added downloads object
+        video: VideoFormat[];
+        audio: VideoFormat[];
+    };
     analysis: {
         summary: string[];
         sentiment: string;

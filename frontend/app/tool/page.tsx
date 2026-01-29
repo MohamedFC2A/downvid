@@ -24,9 +24,21 @@ export default function ToolPage() {
     const [selectedFormatId, setSelectedFormatId] = useState<string | null>(null);
     const [downloadMode, setDownloadMode] = useState<"video" | "audio">("video");
     const [status, setStatus] = useState<DownloadStatus>({ status: "idle", percent: 0 });
+    const [platformDetected, setPlatformDetected] = useState<string | null>(null);
 
     const [lastErrorStage, setLastErrorStage] = useState<"analyze" | "download" | "ws" | "other">("other");
     const [lastError, setLastError] = useState<string>("");
+
+    // Auto-Platform Detection
+    useEffect(() => {
+        const u = url.toLowerCase();
+        if (u.includes('youtube.com') || u.includes('youtu.be')) setPlatformDetected('YouTube');
+        else if (u.includes('tiktok.com')) setPlatformDetected('TikTok');
+        else if (u.includes('instagram.com')) setPlatformDetected('Instagram');
+        else if (u.includes('facebook.com') || u.includes('fb.watch')) setPlatformDetected('Facebook');
+        else if (u.includes('twitter.com') || u.includes('x.com')) setPlatformDetected('Twitter');
+        else setPlatformDetected(null);
+    }, [url]);
 
     const clientId = useMemo(() => Math.random().toString(36).slice(2), []);
     const wsRef = useRef<WebSocketClient | null>(null);
@@ -96,20 +108,29 @@ export default function ToolPage() {
 
         try {
             const data = await analyzeVideo(u);
-            setVideoInfo({ title: data.title, thumbnail: data.thumbnail, description: data.description });
-            setAnalysisData(data.analysis);
-            setAvailableFormats(data.available_formats || []);
-            setAudioFormats(data.audio_formats || []);
-            const videoIds = new Set((data.available_formats || []).map((f) => f.format_id));
-            const audioIds = new Set((data.audio_formats || []).map((f) => f.format_id));
-            if (downloadMode === "video" && selectedFormatId && !videoIds.has(selectedFormatId)) {
+            // Updated to handle new response structure: { platform, title, thumbnail, downloads: { video: [], audio: [] } }
+            setVideoInfo({
+                title: data.title,
+                thumbnail: data.thumbnail,
+                description: `Source: ${data.platform || platformDetected || 'Unknown'}`
+            });
+
+            // If the API returns the new structure with 'downloads' object
+            if (data.downloads) {
+                setAvailableFormats(data.downloads.video || []);
+                setAudioFormats(data.downloads.audio || []);
+
+                // Reset Selection
                 setSelectedFormatId(null);
-            }
-            if (downloadMode === "audio" && selectedFormatId && !audioIds.has(selectedFormatId)) {
-                setSelectedFormatId(null);
-            }
-            if (downloadMode === "audio" && audioIds.size === 0 && videoIds.size > 0) {
-                setDownloadMode("video");
+
+                // Intelligent Default Mode Switch
+                if (data.downloads.video.length > 0) setDownloadMode("video");
+                else if (data.downloads.audio.length > 0) setDownloadMode("audio");
+            } else {
+                // Fallback to old behavior if API hasn't updated perfectly or error
+                setAnalysisData(data.analysis);
+                setAvailableFormats(data.available_formats || []);
+                setAudioFormats(data.audio_formats || []);
             }
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "Analysis failed";
@@ -165,12 +186,36 @@ export default function ToolPage() {
                                     if (text) setUrl(text.trim());
                                 }}
                             >
-                                <Input
-                                    value={url}
-                                    onChange={(e) => setUrl(e.target.value)}
-                                    placeholder="Paste a YouTube / TikTok / Instagram URL…"
-                                    className="h-12 text-base bg-black/20 border-white/10 focus-visible:ring-white/20"
-                                />
+                            >
+                                <div className="relative group">
+                                    <Input
+                                        value={url}
+                                        onChange={(e) => setUrl(e.target.value)}
+                                        placeholder="Paste a URL (YouTube, TikTok, Instagram...)"
+                                        className={`h-14 text-lg bg-white/5 border-white/10 focus-visible:ring-cyan-400/50 backdrop-blur-xl transition-all pl-12 pr-12 rounded-xl ${platformDetected ? 'border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.1)]' : ''}`}
+                                    />
+                                    {/* Platform Icon Indicator */}
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none transition-colors duration-300">
+                                        {platformDetected ? (
+                                            <span className="text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]">
+                                                {/* Simple SVG Icons based on platform could go here, for now using initial char in a styled box */}
+                                                <div className="w-6 h-6 flex items-center justify-center font-bold font-mono border border-cyan-400 rounded bg-cyan-900/40">
+                                                    {platformDetected[0]}
+                                                </div>
+                                            </span>
+                                        ) : (
+                                            <svg className="w-5 h-5 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                                        )}
+                                    </div>
+
+                                    {/* Verified Badge */}
+                                    {platformDetected && (
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-green-400 bg-green-950/30 px-2 py-1 rounded-full border border-green-500/20 animate-in fade-in zoom-in duration-300">
+                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" /></svg>
+                                            <span className="text-[10px] uppercase font-bold tracking-wider">Verified</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <Button className="h-12 px-6 text-sm font-semibold" onClick={onAnalyze} disabled={isAnalyzing || !url.trim()}>
                                 {isAnalyzing ? "Analyzing..." : "Analyze"}
