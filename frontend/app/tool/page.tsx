@@ -181,25 +181,6 @@ export default function ToolPage() {
         return list.find((f) => f.format_id === selectedFormatId) || null;
     }, [audioFormats, availableFormats, downloadMode, selectedFormatId]);
 
-    async function consumeDownload(): Promise<{ allowed: boolean; downloads_remaining: number | null }> {
-        const res = await fetch("/api/download/consume", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                ...(auth.accessToken ? { Authorization: `Bearer ${auth.accessToken}` } : {}),
-            },
-            body: JSON.stringify({}),
-        });
-        const json = await res.json().catch(() => null);
-        if (!res.ok) {
-            throw new Error(json?.detail || json?.error || `Consume failed (${res.status})`);
-        }
-        return {
-            allowed: Boolean(json?.allowed),
-            downloads_remaining: typeof json?.downloads_remaining === "number" ? json.downloads_remaining : null,
-        };
-    }
-
     async function onDownload() {
         if (auth.configured && !auth.user) {
             setLastError(t(lang, "subs.loginRequired"));
@@ -216,22 +197,56 @@ export default function ToolPage() {
 
         setLastError("");
         try {
-            const { allowed } = await consumeDownload();
-            if (!allowed) {
-                setLastError(t(lang, "subs.freeLimitReached"));
-                void entitlements.refresh();
-                return;
+            const title = (videoInfo?.title || "downvid").trim();
+            const ext = (selectedFormat.extension || "mp4").toString().replace(/^\./, "") || "mp4";
+            const resolution = (selectedFormat.resolution || "").toString().replace(/[^\w.-]+/g, "_").slice(0, 24);
+            const base = title
+                .replace(/[\\/:*?\"<>|]+/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+                .slice(0, 90);
+            const filename = `${base}${resolution ? `_${resolution}` : ""}.${ext}`;
+
+            // Download via same-origin POST to avoid sending users to googlevideo URLs.
+            const iframeName = "downvid_download_iframe";
+            let iframe = document.getElementById(iframeName) as HTMLIFrameElement | null;
+            if (!iframe) {
+                iframe = document.createElement("iframe");
+                iframe.name = iframeName;
+                iframe.id = iframeName;
+                iframe.style.display = "none";
+                document.body.appendChild(iframe);
             }
 
-            const a = document.createElement("a");
-            a.href = selectedFormat.url;
-            a.target = "_blank";
-            a.rel = "noreferrer";
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+            const form = document.createElement("form");
+            form.method = "POST";
+            form.action = "/api/download/proxy";
+            form.target = iframeName;
+            form.style.display = "none";
 
-            void entitlements.refresh();
+            const inUrl = document.createElement("input");
+            inUrl.type = "hidden";
+            inUrl.name = "url";
+            inUrl.value = selectedFormat.url;
+            form.appendChild(inUrl);
+
+            const inName = document.createElement("input");
+            inName.type = "hidden";
+            inName.name = "filename";
+            inName.value = filename;
+            form.appendChild(inName);
+
+            const inToken = document.createElement("input");
+            inToken.type = "hidden";
+            inToken.name = "access_token";
+            inToken.value = auth.accessToken || "";
+            form.appendChild(inToken);
+
+            document.body.appendChild(form);
+            form.submit();
+            form.remove();
+
+            window.setTimeout(() => void entitlements.refresh(), 800);
         } catch (e) {
             setLastError(e instanceof Error ? e.message : t(lang, "tool.downloadUrlFailed"));
         }
