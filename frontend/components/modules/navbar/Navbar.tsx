@@ -23,7 +23,7 @@ export function Navbar() {
         { href: '/beat', key: 'nav.beat' as const },
         { href: '/settings', key: 'nav.settings' as const },
         { href: '/subscriptions', key: 'nav.subscriptions' as const },
-        { href: '#', key: 'nav.docs' as const },
+        { href: '/docs', key: 'nav.docs' as const },
     ];
 
     return (

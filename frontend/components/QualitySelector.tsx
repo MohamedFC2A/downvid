@@ -11,6 +11,7 @@ export interface VideoFormat {
     filesize_str: string;
     note: string;
     extension: string;
+    url?: string;
     height?: number;
     fps?: number;
     vcodec?: string;

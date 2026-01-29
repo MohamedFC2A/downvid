@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdmin, getUserIdFromBearer } from '@/app/api/_supabase/admin';
+import { getSupabaseUserClient, getUserEnv, getUserIdFromBearer } from '@/app/api/_supabase/user';
+
+export const dynamic = 'force-dynamic';
 
 function effectivePlan(plan: string, ultimateUntil: string | null): 'free' | 'ultimate' {
     const p = (plan || '').toLowerCase();
@@ -11,16 +13,16 @@ function effectivePlan(plan: string, ultimateUntil: string | null): 'free' | 'ul
 }
 
 export async function POST(req: Request) {
-    const admin = getSupabaseAdmin();
-    if (!admin) {
+    const env = getUserEnv();
+    if (!env) {
         const hasUrl = Boolean((process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim());
-        const hasService = Boolean((process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim());
+        const hasAnon = Boolean((process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim());
         return NextResponse.json(
             {
-                detail: 'Supabase is not configured on the server (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)',
+                detail: 'Supabase is not configured (missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)',
                 missing: {
-                    SUPABASE_URL: !hasUrl,
-                    SUPABASE_SERVICE_ROLE_KEY: !hasService,
+                    NEXT_PUBLIC_SUPABASE_URL: !hasUrl,
+                    NEXT_PUBLIC_SUPABASE_ANON_KEY: !hasAnon,
                 },
             },
             { status: 503 }
@@ -29,8 +31,13 @@ export async function POST(req: Request) {
 
     const auth = req.headers.get('authorization') || '';
     const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
-    const userId = await getUserIdFromBearer(admin.env, token);
+    const userId = await getUserIdFromBearer(env, token);
     if (!userId) {
+        return NextResponse.json({ detail: 'Unauthorized' }, { status: 401 });
+    }
+
+    const supabase = getSupabaseUserClient(token);
+    if (!supabase) {
         return NextResponse.json({ detail: 'Unauthorized' }, { status: 401 });
     }
 
@@ -40,14 +47,14 @@ export async function POST(req: Request) {
         return NextResponse.json({ detail: 'Code is required' }, { status: 400 });
     }
 
-    const { data: rpcData, error: rpcError } = await admin.client.rpc('redeem_promo_code', { p_user_id: userId, p_code: code });
+    const { data: rpcData, error: rpcError } = await supabase.client.rpc('redeem_promo_code', { p_user_id: userId, p_code: code });
     if (rpcError) {
         return NextResponse.json({ detail: rpcError.message }, { status: 500 });
     }
     const rpc = Array.isArray(rpcData) ? rpcData[0] : rpcData;
 
     // Fetch current profile after redeem
-    const { data: profile, error: profileError } = await admin.client
+    const { data: profile, error: profileError } = await supabase.client
         .from('user_profiles')
         .select('plan,downloads_used,ultimate_until')
         .eq('user_id', userId)

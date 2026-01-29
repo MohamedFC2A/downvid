@@ -1,7 +1,7 @@
 import type { VideoFormat } from "@/components/QualitySelector";
 import { getSupabaseClient } from "@/lib/supabase";
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api` : "/api";
+const API_BASE = "/api";
 
 async function authHeaders(): Promise<Record<string, string>> {
     const supabase = getSupabaseClient();
@@ -48,11 +48,6 @@ export async function analyzeVideo(url: string, opts?: { ai?: boolean; lang?: st
         throw new Error(error?.detail || "Analysis failed");
     }
     return (await res.json()) as AnalyzeResult;
-}
-
-export async function getFileDownloadUrl(fileToken: string): Promise<string> {
-    const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "";
-    return `${baseUrl}/api/file/serve/${fileToken}`;
 }
 
 export type SummarizeResult = {

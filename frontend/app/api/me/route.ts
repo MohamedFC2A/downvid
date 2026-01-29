@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdmin, getUserIdFromBearer } from '@/app/api/_supabase/admin';
+import { getSupabaseUserClient, getUserEnv, getUserIdFromBearer } from '@/app/api/_supabase/user';
+
+export const dynamic = 'force-dynamic';
 
 function effectivePlan(plan: string, ultimateUntil: string | null): 'free' | 'ultimate' {
     const p = (plan || '').toLowerCase();
@@ -11,10 +13,10 @@ function effectivePlan(plan: string, ultimateUntil: string | null): 'free' | 'ul
 }
 
 export async function GET(req: Request) {
-    const admin = getSupabaseAdmin();
-    if (!admin) {
+    const env = getUserEnv();
+    if (!env) {
         const hasUrl = Boolean((process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim());
-        const hasService = Boolean((process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim());
+        const hasAnon = Boolean((process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim());
         return NextResponse.json(
             {
                 supabase_enabled: false,
@@ -24,8 +26,8 @@ export async function GET(req: Request) {
                 ai_enabled: false,
                 ultimate_until: null,
                 missing: {
-                    SUPABASE_URL: !hasUrl,
-                    SUPABASE_SERVICE_ROLE_KEY: !hasService,
+                    NEXT_PUBLIC_SUPABASE_URL: !hasUrl,
+                    NEXT_PUBLIC_SUPABASE_ANON_KEY: !hasAnon,
                 },
             },
             { status: 200 }
@@ -34,15 +36,20 @@ export async function GET(req: Request) {
 
     const auth = req.headers.get('authorization') || '';
     const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
-    const userId = await getUserIdFromBearer(admin.env, token);
+    const userId = await getUserIdFromBearer(env, token);
     if (!userId) {
         return NextResponse.json({ detail: 'Unauthorized' }, { status: 401 });
     }
 
-    // Ensure profile exists
-    await admin.client.from('user_profiles').upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true });
+    const supabase = getSupabaseUserClient(token);
+    if (!supabase) {
+        return NextResponse.json({ detail: 'Unauthorized' }, { status: 401 });
+    }
 
-    const { data, error } = await admin.client
+    // Ensure profile exists
+    await supabase.client.from('user_profiles').upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true });
+
+    const { data, error } = await supabase.client
         .from('user_profiles')
         .select('user_id,plan,downloads_used,ultimate_until')
         .eq('user_id', userId)

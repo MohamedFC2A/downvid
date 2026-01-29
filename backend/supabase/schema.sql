@@ -67,10 +67,22 @@ security definer
 set search_path = public
 as $$
 declare
+  caller uuid;
   current_plan public.user_plan;
   used integer;
   u_until timestamptz;
 begin
+  caller := auth.uid();
+  if caller is null then
+    raise exception 'Not authenticated';
+  end if;
+  if p_user_id is null then
+    p_user_id := caller;
+  end if;
+  if p_user_id <> caller then
+    raise exception 'Unauthorized';
+  end if;
+
   insert into public.user_profiles (user_id)
   values (p_user_id)
   on conflict (user_id) do nothing;
@@ -112,6 +124,7 @@ end $$;
 
 revoke all on function public.consume_download(uuid) from public;
 grant execute on function public.consume_download(uuid) to service_role;
+grant execute on function public.consume_download(uuid) to authenticated;
 
 -- Promo codes (one-time global usage)
 create table if not exists public.promo_codes (
@@ -145,9 +158,21 @@ security definer
 set search_path = public
 as $$
 declare
+  caller uuid;
   promo record;
   new_until timestamptz;
 begin
+  caller := auth.uid();
+  if caller is null then
+    raise exception 'Not authenticated';
+  end if;
+  if p_user_id is null then
+    p_user_id := caller;
+  end if;
+  if p_user_id <> caller then
+    raise exception 'Unauthorized';
+  end if;
+
   if p_code is null or length(trim(p_code)) < 4 then
     success := false;
     message := 'Invalid code';
@@ -225,3 +250,4 @@ end $$;
 
 revoke all on function public.redeem_promo_code(uuid, text) from public;
 grant execute on function public.redeem_promo_code(uuid, text) to service_role;
+grant execute on function public.redeem_promo_code(uuid, text) to authenticated;

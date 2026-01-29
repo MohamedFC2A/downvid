@@ -14,11 +14,6 @@ const themeOptions: Array<{ id: ThemeMode; titleKey: string; descKey: string }> 
     { id: 'light', titleKey: 'settings.theme.lightTitle', descKey: 'settings.theme.lightDesc' },
 ];
 
-const languageOptions: Array<{ id: AppLanguage; titleKey: string; descKey: string }> = [
-    { id: 'ar', titleKey: 'settings.language.arTitle', descKey: 'settings.language.arDesc' },
-    { id: 'en', titleKey: 'settings.language.enTitle', descKey: 'settings.language.enDesc' },
-];
-
 export function SettingsPage() {
     const { settings, updateSettings, ready } = useSettings();
     const auth = useAuth();
@@ -86,24 +81,6 @@ export function SettingsPage() {
                                 onChange={(v) => updateSettings({ language: v })}
                                 disabled={!ready}
                             />
-                            <div className="space-y-4">
-                                {languageOptions.map((option) => (
-                                    <button
-                                        key={option.id}
-                                        type="button"
-                                        disabled={!ready}
-                                        onClick={() => updateSettings({ language: option.id })}
-                                        className={`w-full rounded-2xl border px-4 py-4 text-left transition-all ${
-                                            settings.language === option.id
-                                                ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                                                : 'border-[var(--panel-border)] bg-[var(--deep)] hover:opacity-90'
-                                        }`}
-                                    >
-                                        <div className="text-sm font-semibold text-[var(--foreground)]">{t(lang, option.titleKey)}</div>
-                                        <div className="text-xs text-[var(--foreground)] opacity-60 mt-1">{t(lang, option.descKey)}</div>
-                                    </button>
-                                ))}
-                            </div>
 
                             <ToggleRow
                                 label={t(lang, 'settings.reducedMotion')}
@@ -154,7 +131,7 @@ export function SettingsPage() {
                     >
                         <div className="mb-6">
                             <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.ai')}</div>
-                            <h2 className="text-lg font-semibold text-[var(--foreground)] mt-2">{t(lang, 'settings.ai')}</h2>
+                            <h2 className="text-lg font-semibold text-[var(--foreground)] mt-2">{t(lang, 'settings.aiHubTitle')}</h2>
                         </div>
                         {aiLocked && (
                             <div className="mb-5 rounded-2xl border border-[var(--panel-border)] bg-[var(--deep)] p-4 text-xs text-[var(--foreground)] opacity-75">
@@ -205,6 +182,16 @@ export function SettingsPage() {
                                 rtl={rtl}
                             />
                         </div>
+                        <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--deep)] p-4">
+                            <div className="text-xs text-[var(--foreground)] opacity-70">
+                                {t(lang, 'settings.aiHubHint')}
+                            </div>
+                            <div className="mt-3">
+                                <Link className="underline underline-offset-4" href="/beat">
+                                    {t(lang, 'settings.openAiHub')}
+                                </Link>
+                            </div>
+                        </div>
                     </motion.section>
                 </div>
             </div>
@@ -245,7 +232,7 @@ function ToggleRow({
             >
                 <span
                     className={`inline-flex h-5 w-5 transform items-center justify-center rounded-full bg-[var(--foreground)] shadow transition-all ${
-                        enabled ? (rtl ? 'translate-x-1' : 'translate-x-5') : (rtl ? 'translate-x-5' : 'translate-x-1')
+                        enabled ? 'translate-x-5' : 'translate-x-1'
                     }`}
                 />
             </button>
@@ -262,31 +249,38 @@ function LanguageSwitch({
     onChange: (v: AppLanguage) => void;
     disabled?: boolean;
 }) {
-    const isAr = value === 'ar';
+    const rtl = value === 'ar';
+    const options: Array<{ id: AppLanguage; label: string }> = rtl
+        ? [
+              { id: 'ar', label: 'AR' },
+              { id: 'en', label: 'EN' },
+          ]
+        : [
+              { id: 'en', label: 'EN' },
+              { id: 'ar', label: 'AR' },
+          ];
+    const idx = Math.max(0, options.findIndex((o) => o.id === value));
     return (
         <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--deep)] p-3">
             <div className="relative h-11 w-full rounded-xl border border-[var(--panel-border)] bg-[var(--panel)] p-1">
                 <div
                     className="absolute top-1 bottom-1 w-1/2 rounded-lg border border-[var(--panel-border)] bg-[var(--accent-soft)] transition-transform"
-                    style={{ transform: isAr ? 'translateX(100%)' : 'translateX(0%)' }}
+                    style={{ transform: `translateX(${idx * 100}%)` }}
                 />
                 <div className="relative z-10 grid h-full grid-cols-2">
-                    <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => onChange('en')}
-                        className={`rounded-lg text-sm font-semibold transition-opacity ${!isAr ? 'opacity-100' : 'opacity-65 hover:opacity-90'}`}
-                    >
-                        EN
-                    </button>
-                    <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => onChange('ar')}
-                        className={`rounded-lg text-sm font-semibold transition-opacity ${isAr ? 'opacity-100' : 'opacity-65 hover:opacity-90'}`}
-                    >
-                        AR
-                    </button>
+                    {options.map((o) => (
+                        <button
+                            key={o.id}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => onChange(o.id)}
+                            className={`rounded-lg text-sm font-semibold transition-opacity ${
+                                value === o.id ? 'opacity-100' : 'opacity-65 hover:opacity-90'
+                            }`}
+                        >
+                            {o.label}
+                        </button>
+                    ))}
                 </div>
             </div>
         </div>

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Navbar } from '@/components/modules/navbar/Navbar';
 import { SettingsSync } from '@/components/SettingsSync';
+import { EntitlementsSync } from '@/components/EntitlementsSync';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -19,6 +20,7 @@ export default function RootLayout({
         <div className="fixed inset-0 bg-grid opacity-60 pointer-events-none z-0" />
         <div className="fixed inset-0 bg-gradient-to-t from-[var(--background)] via-transparent to-transparent z-0 pointer-events-none" />
         <SettingsSync />
+        <EntitlementsSync />
         <Navbar />
         <div className="relative z-10">
           {children}

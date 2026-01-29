@@ -3,15 +3,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InsightsPanel } from "@/components/modules/ai/InsightsPanel";
 import { QualitySelector, type VideoFormat } from "@/components/QualitySelector";
-import { analyzeVideo, getFileDownloadUrl, type AnalyzeResult } from "@/lib/api";
-import { WebSocketClient, type DownloadStatus } from "@/lib/socket";
+import { analyzeVideo, type AnalyzeResult } from "@/lib/api";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
-import { AdminLogsPanel } from "@/components/modules/debug/AdminLogsPanel";
-import { AiFixPanel } from "@/components/modules/debug/AiFixPanel";
 import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
-import { UpscaleButton } from "@/components/UpscaleButton";
 import { useAuth } from "@/hooks/useAuth";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { useSettings } from "@/hooks/useSettings";
@@ -27,7 +23,6 @@ export default function ToolPage() {
     const auth = useAuth();
     const entitlements = useEntitlements();
     const lang = settings.language;
-    const [showAdmin, setShowAdmin] = useState(false);
     const [url, setUrl] = useState("");
     const [restoredAt, setRestoredAt] = useState<string | null>(null);
     const [showRestoredBanner, setShowRestoredBanner] = useState(false);
@@ -38,11 +33,7 @@ export default function ToolPage() {
     const [audioFormats, setAudioFormats] = useState<VideoFormat[]>([]);
     const [selectedFormatId, setSelectedFormatId] = useState<string | null>(null);
     const [downloadMode, setDownloadMode] = useState<"video" | "audio">("video");
-    const [status, setStatus] = useState<DownloadStatus>({ status: "idle", percent: 0 });
     const [platformDetected, setPlatformDetected] = useState<string | null>(null);
-    const [downloadedFile, setDownloadedFile] = useState<{ token: string; filename?: string } | null>(null);
-
-    const [lastErrorStage, setLastErrorStage] = useState<"analyze" | "download" | "ws" | "other">("other");
     const [lastError, setLastError] = useState<string>("");
     const isDataSaver = settings.dataSaver;
     const saveTimerRef = useRef<number | null>(null);
@@ -72,9 +63,6 @@ export default function ToolPage() {
                         ? 'x'
                         : 'unknown';
 
-    const clientId = useMemo(() => Math.random().toString(36).slice(2), []);
-    const wsRef = useRef<WebSocketClient | null>(null);
-
     useEffect(() => {
         const restored = loadToolState();
         if (restored && restored.url) {
@@ -85,33 +73,12 @@ export default function ToolPage() {
             setAudioFormats(restored.audioFormats || []);
             setSelectedFormatId(restored.selectedFormatId || null);
             setDownloadMode(restored.downloadMode || "video");
-            setDownloadedFile(restored.downloadedFile || null);
             if (restored.savedAt) {
                 setRestoredAt(restored.savedAt);
                 setShowRestoredBanner(true);
             }
         }
     }, []);
-
-    useEffect(() => {
-        wsRef.current?.close();
-        wsRef.current = new WebSocketClient(
-            clientId,
-            (data) => {
-                setStatus((prev) => ({ ...prev, ...data }));
-                if (data.status === "error" && data.error) {
-                    setLastErrorStage("download");
-                    setLastError(data.error);
-                }
-                if (data.status === "completed" && data.file_token) {
-                    setDownloadedFile({ token: data.file_token, filename: data.filename });
-                }
-            },
-            { accessToken: auth.accessToken }
-        );
-        wsRef.current.connect();
-        return () => wsRef.current?.close();
-    }, [clientId, auth.accessToken]);
 
     useEffect(() => {
         // Persist tool state so users can navigate away and resume.
@@ -132,7 +99,7 @@ export default function ToolPage() {
                 audioFormats: clampFormats(audioFormats, 60),
                 selectedFormatId,
                 downloadMode,
-                downloadedFile,
+                downloadedFile: null,
             });
         }, TOOL_STATE_DEBOUNCE_MS);
 
@@ -142,7 +109,7 @@ export default function ToolPage() {
                 saveTimerRef.current = null;
             }
         };
-    }, [url, lang, videoInfo, analysisData, availableFormats, audioFormats, selectedFormatId, downloadMode, downloadedFile]);
+    }, [url, lang, videoInfo, analysisData, availableFormats, audioFormats, selectedFormatId, downloadMode]);
 
     useEffect(() => {
         try {
@@ -172,10 +139,8 @@ export default function ToolPage() {
         const u = url.trim();
         if (!u || !isUrlValid) return;
         setIsAnalyzing(true);
-        setStatus({ status: "idle", percent: 0 });
         setAnalysisData(null);
         setVideoInfo(null);
-        setDownloadedFile(null);
         setAvailableFormats([]);
         setAudioFormats([]);
         setSelectedFormatId(null);
@@ -195,52 +160,80 @@ export default function ToolPage() {
             setAnalysisData(data.analysis || null);
             setAvailableFormats(data.available_formats || []);
             setAudioFormats(data.audio_formats || []);
+
+            const nextVideo = Array.isArray(data.available_formats) && data.available_formats.length > 0 ? data.available_formats[0]?.format_id : null;
+            const nextAudio = Array.isArray(data.audio_formats) && data.audio_formats.length > 0 ? data.audio_formats[0]?.format_id : null;
+            const next = downloadMode === "audio" ? nextAudio : nextVideo;
+            if (next) {
+                setSelectedFormatId(next);
+                persistSelection(downloadMode, next);
+            }
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : t(lang, "tool.analysisFailed");
-            setLastErrorStage("analyze");
             setLastError(msg);
-            setStatus({ status: "error", percent: 0, error: msg });
         } finally {
             setIsAnalyzing(false);
         }
     }
 
-    function onDownload() {
-        const u = url.trim();
-        if (!u || !wsRef.current) return;
+    const selectedFormat = useMemo(() => {
+        const list = downloadMode === "audio" ? audioFormats : availableFormats;
+        return list.find((f) => f.format_id === selectedFormatId) || null;
+    }, [audioFormats, availableFormats, downloadMode, selectedFormatId]);
+
+    async function consumeDownload(): Promise<{ allowed: boolean; downloads_remaining: number | null }> {
+        const res = await fetch("/api/download/consume", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...(auth.accessToken ? { Authorization: `Bearer ${auth.accessToken}` } : {}),
+            },
+            body: JSON.stringify({}),
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok) {
+            throw new Error(json?.detail || json?.error || `Consume failed (${res.status})`);
+        }
+        return {
+            allowed: Boolean(json?.allowed),
+            downloads_remaining: typeof json?.downloads_remaining === "number" ? json.downloads_remaining : null,
+        };
+    }
+
+    async function onDownload() {
         if (auth.configured && !auth.user) {
-            setLastErrorStage("download");
             setLastError(t(lang, "subs.loginRequired"));
             return;
         }
+        if (!selectedFormatId || !selectedFormat?.url) {
+            setLastError(t(lang, "tool.pickFormat"));
+            return;
+        }
         if (entitlements.plan === "free" && entitlements.downloadsRemaining === 0) {
-            setLastErrorStage("download");
             setLastError(t(lang, "subs.freeLimitReached"));
             return;
         }
-        setLastError("");
-        setDownloadedFile(null);
-        setStatus({ status: "initializing", percent: 0, speed: "", eta: "" });
-        wsRef.current.sendDownloadSpec(u, {
-            mode: downloadMode,
-            format_id: selectedFormatId || undefined,
-        });
-        void entitlements.refresh();
-    }
 
-    async function onDownloadFile() {
-        if (!downloadedFile?.token) return;
+        setLastError("");
         try {
-            const downloadUrl = await getFileDownloadUrl(downloadedFile.token);
-            const link = document.createElement("a");
-            link.href = downloadUrl;
-            link.setAttribute("download", downloadedFile.filename || "download");
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-        } catch {
-            setLastErrorStage("download");
-            setLastError(t(lang, "tool.downloadUrlFailed"));
+            const { allowed } = await consumeDownload();
+            if (!allowed) {
+                setLastError(t(lang, "subs.freeLimitReached"));
+                void entitlements.refresh();
+                return;
+            }
+
+            const a = document.createElement("a");
+            a.href = selectedFormat.url;
+            a.target = "_blank";
+            a.rel = "noreferrer";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            void entitlements.refresh();
+        } catch (e) {
+            setLastError(e instanceof Error ? e.message : t(lang, "tool.downloadUrlFailed"));
         }
     }
 
@@ -267,16 +260,6 @@ export default function ToolPage() {
         } catch {
             // Clipboard access may be blocked.
         }
-    };
-
-    const statusLabel = (s: DownloadStatus["status"]) => {
-        if (s === "idle") return t(lang, "status.idle");
-        if (s === "initializing") return t(lang, "status.initializing");
-        if (s === "downloading") return t(lang, "status.downloading");
-        if (s === "finishing") return t(lang, "status.finishing");
-        if (s === "completed") return t(lang, "status.completed");
-        if (s === "error") return t(lang, "status.error");
-        return s;
     };
 
     return (
@@ -378,13 +361,6 @@ export default function ToolPage() {
                             <Button
                                 variant="secondary"
                                 className="h-12 px-6 text-sm"
-                                onClick={() => setShowAdmin((v) => !v)}
-                            >
-                                {showAdmin ? t(lang, "tool.hideLogs") : t(lang, "tool.showLogs")}
-                            </Button>
-                            <Button
-                                variant="secondary"
-                                className="h-12 px-6 text-sm"
                                 onClick={() => {
                                     clearToolState();
                                     setRestoredAt(null);
@@ -395,9 +371,7 @@ export default function ToolPage() {
                                     setAvailableFormats([]);
                                     setAudioFormats([]);
                                     setSelectedFormatId(null);
-                                    setDownloadedFile(null);
                                     setLastError("");
-                                    setStatus({ status: "idle", percent: 0 });
                                 }}
                                 disabled={!url && !videoInfo && availableFormats.length === 0 && audioFormats.length === 0}
                             >
@@ -415,9 +389,9 @@ export default function ToolPage() {
                             </div>
                         )}
 
-                        {status.status === "error" && (
+                        {lastError && (
                             <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700">
-                                {status.error || t(lang, "status.error")}
+                                {lastError}
                             </div>
                         )}
                     </div>
@@ -476,9 +450,6 @@ export default function ToolPage() {
                                     <div className="p-5 space-y-4">
                                         <div className="flex items-center justify-between">
                                             <div className="text-sm font-semibold">{t(lang, "tool.quality")}</div>
-                                            <div className="text-[11px] font-mono text-[var(--foreground)] opacity-60">
-                                                {t(lang, "tool.websocket")}: {wsRef.current?.isConnected ? t(lang, "tool.wsConnected") : t(lang, "tool.wsReconnecting")}
-                                            </div>
                                         </div>
                                         {auth.configured && (
                                             <div className="text-[11px] font-mono text-[var(--foreground)] opacity-65">
@@ -517,77 +488,25 @@ export default function ToolPage() {
                                             }}
                                         />
 
-                                        {settings.upscaleEnabled && entitlements.aiEnabled && (
-                                            <UpscaleButton
-                                                videoUrl={url.trim()}
-                                                fileToken={downloadedFile?.token || undefined}
-                                                disabled={isAnalyzing || !url.trim() || !downloadedFile?.token}
-                                            />
-                                        )}
-
                                         <Button
                                             onClick={onDownload}
                                             disabled={
-                                                status.status === "downloading"
-                                                || status.status === "finishing"
-                                                || status.status === "initializing"
+                                                isAnalyzing
+                                                || !selectedFormat?.url
                                                 || (auth.configured && !auth.user)
                                                 || (entitlements.plan === "free" && entitlements.downloadsRemaining === 0)
                                             }
                                             className="w-full h-12 text-sm font-semibold"
                                         >
-                                            {selectedFormatId ? t(lang, "tool.downloadSelected") : t(lang, "tool.downloadBest")}
+                                            {t(lang, "tool.downloadSelected")}
                                         </Button>
-
-                                        {downloadedFile?.token && status.status === "completed" && (
-                                            <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-4 space-y-3">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div>
-                                                        <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-widest"}`}>{t(lang, "tool.ready")}</div>
-                                                        <div className="text-sm font-semibold text-[var(--foreground)] break-all">
-                                                            {downloadedFile.filename || t(lang, "tool.downloadReady")}
-                                                        </div>
-                                                    </div>
-                                                    <Button className="h-9 px-4 text-xs" onClick={onDownloadFile}>
-                                                        {t(lang, "tool.downloadFile")}
-                                                    </Button>
-                                                </div>
-                                                <div className="text-[11px] font-mono text-[var(--foreground)] opacity-60 break-all">
-                                                    {t(lang, "tool.token")}: {downloadedFile.token}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {(status.status === "downloading" || status.status === "finishing" || status.status === "initializing") && (
-                                            <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--deep)] p-4">
-                                                <div className="flex justify-between text-[var(--foreground)] opacity-75 text-xs font-mono">
-                                                    <span className={lang === "ar" ? "" : "uppercase tracking-wider"}>{statusLabel(status.status)}</span>
-                                                    <span className="opacity-70">
-                                                        {[status.speed, status.eta].filter(Boolean).join(" • ")}
-                                                    </span>
-                                                </div>
-                                                <div className="mt-3 h-1.5 w-full bg-[var(--panel)] rounded-full overflow-hidden border border-[var(--panel-border)]">
-                                                    <div
-                                                        className="h-full bg-[var(--foreground)] opacity-90"
-                                                        style={{ width: `${Math.max(0, Math.min(100, status.percent || 0))}%` }}
-                                                    />
-                                                </div>
-                                                <div className="text-right text-[var(--foreground)] opacity-60 font-mono text-xs pt-2">
-                                                    {(status.percent || 0).toFixed(1)}%
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
                                 </Card>
                             )}
 
-                            {settings.aiFixEnabled && entitlements.aiEnabled && lastError && (
-                                <AiFixPanel stage={lastErrorStage} url={url.trim()} error={lastError} />
-                            )}
                         </div>
 
                         <div className="lg:col-span-5 space-y-6">
-                            <AdminLogsPanel enabled={showAdmin} />
                             {settings.aiInsightsEnabled && entitlements.aiEnabled && (
                                 <InsightsPanel
                                     data={analysisData}

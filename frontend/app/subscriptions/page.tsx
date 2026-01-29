@@ -48,6 +48,9 @@ export default function SubscriptionsPage() {
     const [promoErr, setPromoErr] = useState<string | null>(null);
     const [showThanks, setShowThanks] = useState(false);
 
+    const planIsLoading = Boolean(auth.configured && auth.user && entitlements.loading);
+    const selectedPlan = entitlements.plan === 'ultimate' ? 'ultimate' : 'free';
+
     const ultimateUntilLabel = useMemo(() => {
         if (!entitlements.ultimateUntil) return null;
         try {
@@ -74,6 +77,7 @@ export default function SubscriptionsPage() {
             setPromoErr(t(lang, 'subs.loginRequired'));
             return;
         }
+        if (planIsLoading) return;
         setPromoBusy(true);
         try {
             const res = await fetch(`/api/promo/redeem`, {
@@ -118,14 +122,21 @@ export default function SubscriptionsPage() {
                 </header>
 
                 <div className="grid gap-6 lg:grid-cols-2">
-                    <Card className="rounded-3xl p-6" spotlight={false}>
+                    <Card
+                        className={`rounded-3xl p-6 transition-all ${selectedPlan === 'free' ? 'ring-2 ring-[var(--accent-soft)]' : ''}`}
+                        spotlight={false}
+                    >
                         <div className="flex items-start justify-between gap-4">
                             <div>
                                 <div className="text-xs font-mono opacity-60">{t(lang, 'subs.free')}</div>
                                 <div className="mt-2 text-xl font-semibold">{t(lang, 'subs.freeTitle')}</div>
                             </div>
                             <div className="text-xs font-mono opacity-70">
-                                {entitlements.plan === 'free' ? t(lang, 'subs.active') : t(lang, 'subs.included')}
+                                {planIsLoading
+                                    ? t(lang, 'subs.loadingPlan')
+                                    : entitlements.plan === 'free'
+                                        ? t(lang, 'subs.active')
+                                        : t(lang, 'subs.included')}
                             </div>
                         </div>
 
@@ -147,10 +158,19 @@ export default function SubscriptionsPage() {
                                 </Link>
                             )}
                         </div>
+
+                        {selectedPlan === 'free' && !planIsLoading && (
+                            <div className="mt-4 rounded-2xl border border-[var(--panel-border)] bg-[var(--panel)] px-4 py-3 text-xs text-[var(--foreground)] opacity-80">
+                                {t(lang, 'subs.selected')}
+                            </div>
+                        )}
                     </Card>
 
                     <div className="ultimate-sheen-border rounded-3xl p-[1px]">
-                        <Card className="rounded-3xl p-6" spotlight={false}>
+                        <Card
+                            className={`rounded-3xl p-6 transition-all ${selectedPlan === 'ultimate' ? 'ring-2 ring-white/15' : ''}`}
+                            spotlight={false}
+                        >
                             <div className="flex items-start justify-between gap-4">
                                 <div>
                                     <div className="text-xs font-mono opacity-70">{t(lang, 'subs.ultimate')}</div>
@@ -159,7 +179,11 @@ export default function SubscriptionsPage() {
                                     </div>
                                 </div>
                                 <div className="text-xs font-mono opacity-70">
-                                    {entitlements.plan === 'ultimate' ? t(lang, 'subs.active') : t(lang, 'subs.recommended')}
+                                    {planIsLoading
+                                        ? t(lang, 'subs.loadingPlan')
+                                        : entitlements.plan === 'ultimate'
+                                            ? t(lang, 'subs.active')
+                                            : t(lang, 'subs.recommended')}
                                 </div>
                             </div>
 
@@ -204,9 +228,9 @@ export default function SubscriptionsPage() {
                                             value={promo}
                                             onChange={(e) => setPromo(e.target.value)}
                                             placeholder={t(lang, 'subs.promoPlaceholder')}
-                                            disabled={promoBusy}
+                                            disabled={promoBusy || planIsLoading}
                                         />
-                                        <Button className="h-10 px-5" onClick={redeemPromo} disabled={promoBusy || !promo.trim()}>
+                                        <Button className="h-10 px-5" onClick={redeemPromo} disabled={promoBusy || planIsLoading || !promo.trim()}>
                                             {promoBusy ? t(lang, 'subs.promoRedeeming') : t(lang, 'subs.promoRedeem')}
                                         </Button>
                                     </div>
@@ -240,6 +264,12 @@ export default function SubscriptionsPage() {
                             <div className="mt-4 text-xs text-[var(--foreground)] opacity-60">
                                 {t(lang, 'subs.upgradeHint')}
                             </div>
+
+                            {selectedPlan === 'ultimate' && !planIsLoading && (
+                                <div className="mt-4 rounded-2xl border border-[var(--panel-border)] bg-[var(--panel)] px-4 py-3 text-xs text-[var(--foreground)] opacity-80">
+                                    {t(lang, 'subs.selected')}
+                                </div>
+                            )}
                         </Card>
                     </div>
                 </div>
