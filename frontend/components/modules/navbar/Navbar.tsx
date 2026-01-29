@@ -20,6 +20,7 @@ export function Navbar() {
 
     const nav = [
         { href: '/tool', key: 'nav.tool' as const },
+        { href: '/beat', key: 'nav.beat' as const },
         { href: '/settings', key: 'nav.settings' as const },
         { href: '/subscriptions', key: 'nav.subscriptions' as const },
         { href: '#', key: 'nav.docs' as const },

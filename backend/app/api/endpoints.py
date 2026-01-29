@@ -601,3 +601,60 @@ async def redeem_promo(payload: PromoRedeemRequest, authorization: str | None = 
         "downloads_used": profile.downloads_used,
         "downloads_remaining": profile.downloads_remaining,
     }
+
+
+class BeatRequest(BaseModel):
+    url: str
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("URL is required")
+        if len(v) > 2048:
+            raise ValueError("URL is too long")
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return v
+
+
+@router.post("/beat")
+async def beat_generate(payload: BeatRequest, lang: str = "ar", authorization: str | None = Header(default=None)):
+    """
+    BEAT (Ultimate): Generate an editing/publishing blueprint with exportable chapters & markers.
+    """
+    if settings.SUPABASE_ENABLED:
+        user_id = await require_user_id(authorization)
+        profile = await supabase_service.get_or_create_profile(user_id)
+        require_ultimate(profile.ai_enabled)
+
+    info = await ytdlp_service.get_video_info(payload.url)
+    title = info.get("title") or "Video"
+    description = info.get("description") or ""
+    duration_seconds = info.get("duration_seconds")
+    try:
+        duration_seconds = int(duration_seconds) if duration_seconds is not None else None
+    except Exception:
+        duration_seconds = None
+
+    transcript_text = await ytdlp_service.get_transcript_text(payload.url, lang=(lang or "ar"))
+    result = await deepseek_service.beat_pack(
+        title=title,
+        description=description,
+        duration_seconds=duration_seconds,
+        transcript_text=transcript_text,
+        lang=(lang or "ar"),
+    )
+
+    admin_log.add(
+        "beat",
+        {
+            "title": title,
+            "extractor": info.get("extractor"),
+            "duration_seconds": duration_seconds,
+            "has_transcript": bool(transcript_text),
+        },
+    )
+
+    return result

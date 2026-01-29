@@ -6,7 +6,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { useAuth } from '@/hooks/useAuth';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { Logo } from '@/components/Logo';
-import type { AppLanguage, ThemeMode, UpscaleModel } from '@/lib/settings';
+import type { AppLanguage, ThemeMode } from '@/lib/settings';
 import { t } from '@/lib/i18n';
 
 const themeOptions: Array<{ id: ThemeMode; titleKey: string; descKey: string }> = [
@@ -17,11 +17,6 @@ const themeOptions: Array<{ id: ThemeMode; titleKey: string; descKey: string }> 
 const languageOptions: Array<{ id: AppLanguage; titleKey: string; descKey: string }> = [
     { id: 'ar', titleKey: 'settings.language.arTitle', descKey: 'settings.language.arDesc' },
     { id: 'en', titleKey: 'settings.language.enTitle', descKey: 'settings.language.enDesc' },
-];
-
-const modelOptions: Array<{ id: UpscaleModel; titleKey: string; descKey: string }> = [
-    { id: 'real-esrgan', titleKey: 'settings.model.realEsrganTitle', descKey: 'settings.model.realEsrganDesc' },
-    { id: 'video-enhance', titleKey: 'settings.model.videoEnhanceTitle', descKey: 'settings.model.videoEnhanceDesc' },
 ];
 
 export function SettingsPage() {
@@ -159,7 +154,7 @@ export function SettingsPage() {
                     >
                         <div className="mb-6">
                             <div className={`text-xs font-mono text-[var(--foreground)] opacity-60 ${lang === "ar" ? "" : "uppercase tracking-[0.3em]"}`}>{t(lang, 'settings.ai')}</div>
-                            <h2 className="text-lg font-semibold text-[var(--foreground)] mt-2">{t(lang, 'settings.upscaleModelTitle')}</h2>
+                            <h2 className="text-lg font-semibold text-[var(--foreground)] mt-2">{t(lang, 'settings.ai')}</h2>
                         </div>
                         {aiLocked && (
                             <div className="mb-5 rounded-2xl border border-[var(--panel-border)] bg-[var(--deep)] p-4 text-xs text-[var(--foreground)] opacity-75">
@@ -209,24 +204,6 @@ export function SettingsPage() {
                                 disabled={!ready || aiLocked}
                                 rtl={rtl}
                             />
-                        </div>
-                        <div className="space-y-4">
-                            {modelOptions.map((option) => (
-                                <button
-                                    key={option.id}
-                                    type="button"
-                                    disabled={!ready}
-                                    onClick={() => updateSettings({ defaultUpscaleModel: option.id })}
-                                    className={`w-full rounded-2xl border px-4 py-4 text-left transition-all ${
-                                        settings.defaultUpscaleModel === option.id
-                                            ? 'border-[var(--ember)] bg-[var(--accent-soft)]'
-                                            : 'border-[var(--panel-border)] bg-[var(--deep)] hover:opacity-90'
-                                    }`}
-                                >
-                                    <div className="text-sm font-semibold text-[var(--foreground)]">{t(lang, option.titleKey)}</div>
-                                    <div className="text-xs text-[var(--foreground)] opacity-60 mt-1">{t(lang, option.descKey)}</div>
-                                </button>
-                            ))}
                         </div>
                     </motion.section>
                 </div>

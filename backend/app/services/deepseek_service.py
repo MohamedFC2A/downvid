@@ -263,4 +263,110 @@ Return STRICT JSON with keys:
                     "notes": f"DeepSeek Error: {e}",
                 }
 
+    async def beat_pack(
+        self,
+        *,
+        title: str,
+        description: str,
+        duration_seconds: Optional[int],
+        transcript_text: Optional[str],
+        lang: str = "ar",
+    ) -> dict[str, Any]:
+        """
+        BEAT = Creator blueprint (beats timeline + exportable chapters/markers).
+        """
+        lang_norm = (lang or "ar").strip().lower()
+        is_ar = lang_norm.startswith("ar")
+        out_lang = "Arabic" if is_ar else "English"
+
+        transcript = (transcript_text or "").strip()
+        if len(transcript) > 20000:
+            transcript = transcript[:20000]
+
+        duration_hint = duration_seconds if isinstance(duration_seconds, int) and duration_seconds > 0 else None
+
+        prompt = f"""
+You are a creator workflow assistant.
+
+Task: produce a BEAT pack for editing & publishing.
+Output language: {out_lang}.
+
+Video metadata:
+- Title: {title}
+- Description: {description}
+- Duration seconds: {duration_hint}
+
+Transcript (may be empty):
+{transcript}
+
+Return STRICT JSON with keys:
+- title: string (video title)
+- duration_seconds: number|null
+- beats: array of 8-16 objects, each:
+  - start_sec: number (>=0)
+  - end_sec: number (> start_sec)
+  - label: short label
+  - goal: short purpose (hook/proof/payoff/etc)
+  - caption: 1 short line to overlay or say
+- shorts: array of 3-7 objects:
+  - start_sec: number (>=0)
+  - end_sec: number (> start_sec)
+  - title: short title
+  - hook: 1 line hook
+- exports:
+  - youtube_chapters: string with lines like \"00:00 Intro\"
+  - markers_csv: CSV string with header \"time_sec,label,comment\" and 8-16 rows
+
+Rules:
+- If duration_seconds is null, assume 180 seconds for timing.
+- Ensure all times are within the duration.
+- Keep beats ordered by time with no overlaps.
+"""
+
+        if not settings.DEEPSEEK_API_KEY:
+            # Minimal fallback without AI (still stable JSON)
+            assumed = duration_hint or 180
+            return {
+                "title": title or "Video",
+                "duration_seconds": assumed,
+                "beats": [
+                    {"start_sec": 0, "end_sec": min(15, assumed), "label": "Hook", "goal": "Hook", "caption": "Start strong."},
+                    {"start_sec": min(15, assumed), "end_sec": min(60, assumed), "label": "Context", "goal": "Context", "caption": "Set context."},
+                    {"start_sec": min(60, assumed), "end_sec": min(assumed, 120), "label": "Value", "goal": "Proof", "caption": "Deliver value."},
+                    {"start_sec": min(120, assumed), "end_sec": assumed, "label": "CTA", "goal": "Payoff", "caption": "Call to action."},
+                ],
+                "shorts": [
+                    {"start_sec": 0, "end_sec": min(30, assumed), "title": "Short Hook", "hook": "Best moment first."},
+                ],
+                "exports": {
+                    "youtube_chapters": "00:00 Hook\n00:15 Context\n01:00 Value\n02:00 CTA\n",
+                    "markers_csv": "time_sec,label,comment\n0,Hook,Start strong\n15,Context,Set context\n60,Value,Deliver value\n120,CTA,Call to action\n",
+                },
+            }
+
+        try:
+            return await self._call_json(
+                system="You are a strict JSON generator. Output JSON only.",
+                user=prompt,
+                timeout=70.0,
+            )
+        except Exception as e:
+            if is_ar:
+                return {
+                    "title": title or "Video",
+                    "duration_seconds": duration_hint,
+                    "beats": [],
+                    "shorts": [],
+                    "exports": {"youtube_chapters": "", "markers_csv": ""},
+                    "error": f"Nexus AI Error: {e}",
+                }
+            return {
+                "title": title or "Video",
+                "duration_seconds": duration_hint,
+                "beats": [],
+                "shorts": [],
+                "exports": {"youtube_chapters": "", "markers_csv": ""},
+                "error": f"Nexus AI Error: {e}",
+            }
+
 deepseek_service = DeepSeekService()
