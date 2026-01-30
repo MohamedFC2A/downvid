@@ -142,6 +142,14 @@ async def analyze_video(req: AnalyzeRequest, ai: bool = False, lang: str = "ar",
     try:
         info = dump_json(req.url)
         formats = normalize_formats(info)
+        playable = [f for f in formats if (f.is_muxed or f.is_video_only or f.is_audio_only)]
+        extractor = str(info.get("extractor") or "").lower()
+        if extractor.startswith("youtube") and len(playable) == 0:
+            raise YtDlpError(
+                "YouTube returned no downloadable formats (only storyboards/metadata). "
+                "This usually means the server IP is blocked or cookies are insufficient. "
+                "Try setting YTDLP_PROXY (residential) and/or refresh YTDLP_COOKIES_B64."
+            )
         out_formats: List[QualityFormat] = []
         for f in formats:
             if f.is_muxed:
@@ -198,6 +206,7 @@ async def analyze_video(req: AnalyzeRequest, ai: bool = False, lang: str = "ar",
                 "extractor": info.get("extractor"),
                 "id": info.get("id"),
                 "formats_count": len(out_formats),
+                "playable_formats_count": len(playable),
                 "ai": bool(ai),
             },
         )
