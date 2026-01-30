@@ -200,6 +200,7 @@ const EN: Dict = {
     "debug.copied": "Copied",
     "debug.clear": "Clear",
     "debug.empty": "No logs yet.",
+    "tool.downloadNote": "If proxy download fails, DOWNVID uses a direct download link to avoid Vercel timeouts.",
 
     "quality.video": "Video",
     "quality.audio": "Audio",
@@ -544,6 +545,7 @@ const AR: Dict = {
     "debug.copied": "تم النسخ",
     "debug.clear": "مسح",
     "debug.empty": "لا يوجد سجل بعد.",
+    "tool.downloadNote": "لو التحميل بالوكيل فشل، DOWNVID سيستخدم تنزيل مباشر لتجنب مهلة Vercel.",
 
     "quality.video": "فيديو",
     "quality.audio": "صوت",

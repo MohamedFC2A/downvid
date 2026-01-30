@@ -387,9 +387,20 @@ export default function ToolPage() {
                 }
             };
 
+            const urlHost = (() => {
+                try {
+                    return new URL(String(selectedFormat.url)).host.toLowerCase();
+                } catch {
+                    return "";
+                }
+            })();
+            const isGoogleVideo = urlHost === "googlevideo.com" || urlHost.endsWith(".googlevideo.com");
+            const endpoint = isGoogleVideo ? "/api/download/redirect" : "/api/download/proxy";
+            pushLog({ level: "info", title: "download.endpoint", data: { endpoint, urlHost } });
+
             const form = document.createElement("form");
             form.method = "POST";
-            form.action = "/api/download/proxy";
+            form.action = endpoint;
             form.target = iframeName;
             form.style.display = "none";
 
@@ -399,11 +410,13 @@ export default function ToolPage() {
             inUrl.value = selectedFormat.url;
             form.appendChild(inUrl);
 
-            const inName = document.createElement("input");
-            inName.type = "hidden";
-            inName.name = "filename";
-            inName.value = filename;
-            form.appendChild(inName);
+            if (!isGoogleVideo) {
+                const inName = document.createElement("input");
+                inName.type = "hidden";
+                inName.name = "filename";
+                inName.value = filename;
+                form.appendChild(inName);
+            }
 
             const inToken = document.createElement("input");
             inToken.type = "hidden";
@@ -689,6 +702,10 @@ export default function ToolPage() {
                                         >
                                             {isDownloading ? t(lang, "status.downloading") : t(lang, "tool.downloadSelected")}
                                         </Button>
+
+                                        <div className="text-[11px] text-[var(--foreground)] opacity-60">
+                                            {t(lang, "tool.downloadNote")}
+                                        </div>
 
                                         <div className="flex items-center justify-between">
                                             <button
