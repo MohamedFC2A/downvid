@@ -10,18 +10,64 @@ const DEFAULT_UA =
 
 function isAllowedProxyHost(hostname: string): boolean {
     const h = (hostname || '').toLowerCase();
-    return (
-        h === 'googlevideo.com' ||
-        h.endsWith('.googlevideo.com') ||
-        h.endsWith('.tiktokcdn.com') ||
-        h.endsWith('.cdninstagram.com') ||
-        h.endsWith('.fbcdn.net') ||
-        h.endsWith('.facebook.com') ||
-        h.endsWith('.x.com') ||
-        h.endsWith('.twimg.com') ||
-        h.endsWith('.ytimg.com') ||
-        h.endsWith('.phimtatvn.com')
-    );
+
+    // YouTube / Google
+    if (h === 'googlevideo.com' || h.endsWith('.googlevideo.com')) return true;
+    if (h.endsWith('.ytimg.com')) return true;
+    if (h.endsWith('.youtube.com')) return true;
+    if (h.endsWith('.ggpht.com')) return true;
+
+    // TikTok
+    if (h.endsWith('.tiktokcdn.com')) return true;
+    if (h.endsWith('.tiktokcdn-us.com')) return true;
+    if (h.endsWith('.byteoversea.com')) return true;
+    if (h.endsWith('.muscdn.com')) return true;
+    if (h.endsWith('.musical.ly')) return true;
+    if (h.endsWith('.tiktokv.com')) return true;
+    if (h.endsWith('.ibytedtos.com')) return true;
+
+    // Instagram
+    if (h.endsWith('.cdninstagram.com')) return true;
+    if (h.endsWith('.instagram.com')) return true;
+
+    // Facebook
+    if (h.endsWith('.fbcdn.net')) return true;
+    if (h.endsWith('.facebook.com')) return true;
+    if (h.endsWith('.fbsbx.com')) return true;
+    if (h.endsWith('.akamaihd.net')) return true;
+
+    // Twitter / X
+    if (h.endsWith('.x.com')) return true;
+    if (h.endsWith('.twimg.com')) return true;
+    if (h.endsWith('.twitter.com')) return true;
+    if (h.endsWith('.video.twimg.com')) return true;
+
+    // Snapchat
+    if (h.endsWith('.snap.com')) return true;
+    if (h.endsWith('.snapchat.com')) return true;
+    if (h.endsWith('.sc-cdn.net')) return true;
+
+    // Pinterest
+    if (h.endsWith('.pinimg.com')) return true;
+
+    // Vimeo
+    if (h.endsWith('.vimeo.com')) return true;
+    if (h.endsWith('.vimeocdn.com')) return true;
+
+    // Reddit
+    if (h.endsWith('.redd.it')) return true;
+    if (h.endsWith('.redditmedia.com')) return true;
+
+    // Third-party download services
+    if (h.endsWith('.phimtatvn.com')) return true;
+    if (h.endsWith('.savefrom.net')) return true;
+    if (h.endsWith('.y2mate.com')) return true;
+
+    // Generic CDNs often used
+    if (h.endsWith('.cloudfront.net')) return true;
+    if (h.endsWith('.fastly.net')) return true;
+
+    return false;
 }
 
 function safeFilename(name: string, fallbackExt: string): string {
