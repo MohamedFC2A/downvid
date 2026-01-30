@@ -35,6 +35,7 @@ export default function ToolPage() {
     const [downloadMode, setDownloadMode] = useState<"video" | "audio">("video");
     const [platformDetected, setPlatformDetected] = useState<string | null>(null);
     const [lastError, setLastError] = useState<string>("");
+    const [isDownloading, setIsDownloading] = useState(false);
     const isDataSaver = settings.dataSaver;
     const saveTimerRef = useRef<number | null>(null);
     const urlTrimmed = url.trim();
@@ -271,6 +272,7 @@ export default function ToolPage() {
         }
 
         setLastError("");
+        setIsDownloading(true);
         try {
             const title = (videoInfo?.title || "downvid").trim();
             const ext = (selectedFormat.extension || "mp4").toString().replace(/^\./, "") || "mp4";
@@ -313,6 +315,8 @@ export default function ToolPage() {
                     }
                 } catch {
                     // ignore - successful downloads won't be readable here.
+                } finally {
+                    setIsDownloading(false);
                 }
             };
 
@@ -345,7 +349,10 @@ export default function ToolPage() {
             form.remove();
 
             window.setTimeout(() => void entitlements.refresh(), 800);
+            // Best-effort: avoid leaving UI stuck if the browser doesn't fire iframe events on downloads.
+            window.setTimeout(() => setIsDownloading(false), 2500);
         } catch (e) {
+            setIsDownloading(false);
             setLastError(e instanceof Error ? e.message : t(lang, "tool.downloadUrlFailed"));
         }
     }
@@ -603,15 +610,10 @@ export default function ToolPage() {
 
                                         <Button
                                             onClick={onDownload}
-                                            disabled={
-                                                isAnalyzing
-                                                || !selectedFormat?.url
-                                                || (auth.configured && !auth.user)
-                                                || (entitlements.plan === "free" && entitlements.downloadsRemaining === 0)
-                                            }
+                                            disabled={isAnalyzing || isDownloading}
                                             className="w-full h-12 text-sm font-semibold"
                                         >
-                                            {t(lang, "tool.downloadSelected")}
+                                            {isDownloading ? t(lang, "status.downloading") : t(lang, "tool.downloadSelected")}
                                         </Button>
                                     </div>
                                 </Card>
