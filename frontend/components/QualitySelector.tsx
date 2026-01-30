@@ -186,18 +186,18 @@ export function QualitySelector({
             <div className="flex p-1 bg-[var(--panel)] rounded-lg border border-[var(--panel-border)]">
                 <button
                     onClick={() => onModeChange('video')}
-                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${mode === 'video'
-                        ? 'bg-[var(--foreground)] text-[var(--background)] shadow-sm'
-                        : 'text-[var(--foreground)] opacity-60 hover:opacity-90'
+                    className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-all duration-200 ease-out ${mode === 'video'
+                        ? 'bg-[var(--foreground)] text-[var(--background)] shadow-md scale-[1.02]'
+                        : 'text-[var(--foreground)] opacity-60 hover:opacity-90 hover:bg-[var(--accent-soft)]'
                         }`}
                 >
                     {t(language, 'quality.video')}
                 </button>
                 <button
                     onClick={() => onModeChange('audio')}
-                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${mode === 'audio'
-                        ? 'bg-[var(--foreground)] text-[var(--background)] shadow-sm'
-                        : 'text-[var(--foreground)] opacity-60 hover:opacity-90'
+                    className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-all duration-200 ease-out ${mode === 'audio'
+                        ? 'bg-[var(--foreground)] text-[var(--background)] shadow-md scale-[1.02]'
+                        : 'text-[var(--foreground)] opacity-60 hover:opacity-90 hover:bg-[var(--accent-soft)]'
                         }`}
                 >
                     {t(language, 'quality.audio')}
@@ -217,13 +217,12 @@ export function QualitySelector({
                                 type="button"
                                 disabled={disabled}
                                 onClick={() => fmt && handleSelect(fmt.format_id)}
-                                className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ${
-                                    selected
-                                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--foreground)]'
+                                className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all duration-200 ease-out ${selected
+                                        ? 'border-[var(--foreground)] bg-[var(--accent-soft)] text-[var(--foreground)] scale-105 shadow-sm'
                                         : disabled
                                             ? 'border-[var(--panel-border)] bg-[var(--panel)] text-[var(--foreground)] opacity-45 cursor-not-allowed'
-                                            : 'border-[var(--panel-border)] bg-[var(--panel)] text-[var(--foreground)] opacity-80 hover:opacity-100'
-                                }`}
+                                            : 'border-[var(--panel-border)] bg-[var(--panel)] text-[var(--foreground)] opacity-80 hover:opacity-100 hover:scale-105 active:scale-95'
+                                    }`}
                                 title={
                                     disabled
                                         ? fmt
@@ -303,13 +302,12 @@ export function QualitySelector({
                                                         type="button"
                                                         disabled={disabled}
                                                         onClick={() => hasDownloadLink(fmt) && handleSelect(fmt.format_id)}
-                                                        className={`w-full grid grid-cols-12 gap-2 px-3 py-2 text-left text-xs border-t border-[var(--panel-border)] ${
-                                                            disabled
+                                                        className={`w-full grid grid-cols-12 gap-2 px-3 py-2 text-left text-xs border-t border-[var(--panel-border)] ${disabled
                                                                 ? 'bg-[var(--deep)] opacity-45 cursor-not-allowed'
                                                                 : selected
                                                                     ? 'bg-[var(--accent-soft)]'
                                                                     : 'bg-[var(--deep)] hover:bg-[var(--panel)]'
-                                                        }`}
+                                                            }`}
                                                         title={disabled ? t(language, 'quality.noLink') : noteLine(fmt)}
                                                     >
                                                         <div className="col-span-4 font-semibold text-[var(--foreground)]">
@@ -344,13 +342,12 @@ export function QualitySelector({
                                                     type="button"
                                                     disabled={disabled}
                                                     onClick={() => hasDownloadLink(fmt) && handleSelect(fmt.format_id)}
-                                                    className={`w-full rounded-lg border px-3 py-2 text-left transition-all ${
-                                                        disabled
+                                                    className={`w-full rounded-lg border px-3 py-2 text-left transition-all ${disabled
                                                             ? 'border-[var(--panel-border)] bg-[var(--panel)] opacity-45 cursor-not-allowed'
                                                             : selected
-                                                            ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                                                            : 'border-[var(--panel-border)] bg-[var(--panel)] hover:opacity-95'
-                                                    }`}
+                                                                ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                                                                : 'border-[var(--panel-border)] bg-[var(--panel)] hover:opacity-95'
+                                                        }`}
                                                     title={disabled ? t(language, 'quality.noLink') : noteLine(fmt)}
                                                 >
                                                     <div className="flex items-center justify-between gap-3">
