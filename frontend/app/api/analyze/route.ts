@@ -117,6 +117,11 @@ function extractAnyLinks(obj: unknown): string[] {
     return out;
 }
 
+function isYouTubeUrl(u: string): boolean {
+    const s = (u || '').toLowerCase();
+    return s.includes('youtube.com') || s.includes('youtu.be');
+}
+
 function effectivePlan(plan: string, ultimateUntil: string | null): 'free' | 'ultimate' {
     const p = (plan || '').toLowerCase();
     if (p !== 'ultimate') return 'free';
@@ -222,13 +227,26 @@ export async function POST(req: Request) {
     }
 
     let data: AnyRecord | null = null;
-    try {
-        data = await autolink();
-    } catch {
+    const preferSnap = isYouTubeUrl(url);
+    if (preferSnap) {
         try {
             data = await snapDownload();
-        } catch (e2) {
-            return NextResponse.json({ detail: e2 instanceof Error ? e2.message : 'RapidAPI failed' }, { status: 502 });
+        } catch {
+            try {
+                data = await autolink();
+            } catch (e2) {
+                return NextResponse.json({ detail: e2 instanceof Error ? e2.message : 'RapidAPI failed' }, { status: 502 });
+            }
+        }
+    } else {
+        try {
+            data = await autolink();
+        } catch {
+            try {
+                data = await snapDownload();
+            } catch (e2) {
+                return NextResponse.json({ detail: e2 instanceof Error ? e2.message : 'RapidAPI failed' }, { status: 502 });
+            }
         }
     }
 
@@ -267,6 +285,15 @@ export async function POST(req: Request) {
             const f = formats[i];
             const link = String(f.url || f.link || f.downloadUrl || f.download_url || '');
             if (!link) continue;
+            // Avoid returning googlevideo links when possible; many are IP/signature/cookie bound and 403 in browsers.
+            if (preferSnap) {
+                try {
+                    const host = new URL(link).hostname.toLowerCase();
+                    if (host === 'googlevideo.com' || host.endsWith('.googlevideo.com')) continue;
+                } catch {
+                    // ignore
+                }
+            }
 
             const ext = String(f.extension || f.ext || f.container || 'mp4').replace(/^\./, '') || 'mp4';
             const isAudio = detectAudio(f);
