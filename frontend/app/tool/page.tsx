@@ -1,6 +1,6 @@
 'use client';
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { InsightsPanel } from "@/components/modules/ai/InsightsPanel";
 import { QualitySelector, type VideoFormat } from "@/components/QualitySelector";
 import { analyzeVideo, type AnalyzeResult } from "@/lib/api";
@@ -14,6 +14,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { t } from "@/lib/i18n";
 import { PlatformIcon, type PlatformId } from "@/components/PlatformIcon";
 import { clampFormats, clearToolState, loadToolState, saveToolState } from "@/lib/toolState";
+import { ErrorViewer, type DebugLogItem } from "@/components/modules/debug/ErrorViewer";
 
 const LAST_SELECTION_KEY = "downvid:lastSelection:v1";
 const TOOL_STATE_DEBOUNCE_MS = 500;
@@ -36,10 +37,42 @@ export default function ToolPage() {
     const [platformDetected, setPlatformDetected] = useState<string | null>(null);
     const [lastError, setLastError] = useState<string>("");
     const [isDownloading, setIsDownloading] = useState(false);
+    const [showLogs, setShowLogs] = useState(false);
+    const [logs, setLogs] = useState<DebugLogItem[]>([]);
     const isDataSaver = settings.dataSaver;
     const saveTimerRef = useRef<number | null>(null);
     const urlTrimmed = url.trim();
     const isUrlValid = /^https?:\/\/\S+/i.test(urlTrimmed);
+
+    const pushLog = useCallback((item: Omit<DebugLogItem, "ts">) => {
+        setLogs((prev) => [{ ts: new Date().toISOString(), ...item }, ...prev].slice(0, 120));
+    }, []);
+
+    useEffect(() => {
+        function onError(ev: ErrorEvent) {
+            const msg = ev?.message || "Unknown error";
+            pushLog({
+                level: "error",
+                title: "window.error",
+                detail: msg,
+                data: {
+                    filename: ev?.filename,
+                    lineno: ev?.lineno,
+                    colno: ev?.colno,
+                },
+            });
+        }
+        function onRejection(ev: PromiseRejectionEvent) {
+            const reason = (ev?.reason && typeof ev.reason === "object") ? JSON.stringify(ev.reason) : String(ev?.reason || "Unknown rejection");
+            pushLog({ level: "error", title: "unhandledrejection", detail: reason });
+        }
+        window.addEventListener("error", onError);
+        window.addEventListener("unhandledrejection", onRejection);
+        return () => {
+            window.removeEventListener("error", onError);
+            window.removeEventListener("unhandledrejection", onRejection);
+        };
+    }, [pushLog]);
 
     // Auto-Platform Detection
     useEffect(() => {
@@ -223,6 +256,12 @@ export default function ToolPage() {
         setLastError("");
 
         try {
+            pushLog({
+                level: "info",
+                title: "analyze.start",
+                detail: u,
+                data: { ai: settings.aiInsightsEnabled && entitlements.aiEnabled, lang: settings.language },
+            });
             const data = await analyzeVideo(u, {
                 ai: settings.aiInsightsEnabled && entitlements.aiEnabled,
                 lang: settings.language,
@@ -244,9 +283,18 @@ export default function ToolPage() {
                 setSelectedFormatId(next);
                 persistSelection(downloadMode, next);
             }
+            pushLog({
+                level: "info",
+                title: "analyze.ok",
+                data: {
+                    video_formats: Array.isArray(data.available_formats) ? data.available_formats.length : 0,
+                    audio_formats: Array.isArray(data.audio_formats) ? data.audio_formats.length : 0,
+                },
+            });
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : t(lang, "tool.analysisFailed");
             setLastError(msg);
+            pushLog({ level: "error", title: "analyze.error", detail: msg });
         } finally {
             setIsAnalyzing(false);
         }
@@ -274,6 +322,23 @@ export default function ToolPage() {
         setLastError("");
         setIsDownloading(true);
         try {
+            pushLog({
+                level: "info",
+                title: "download.click",
+                data: {
+                    mode: downloadMode,
+                    format_id: selectedFormatId,
+                    url_host: (() => {
+                        try {
+                            return new URL(String(selectedFormat.url)).host;
+                        } catch {
+                            return "invalid";
+                        }
+                    })(),
+                    has_token: Boolean(auth.accessToken),
+                    plan: entitlements.plan,
+                },
+            });
             const title = (videoInfo?.title || "downvid").trim();
             const ext = (selectedFormat.extension || "mp4").toString().replace(/^\./, "") || "mp4";
             const resolution = (selectedFormat.resolution || "").toString().replace(/[^\w.-]+/g, "_").slice(0, 24);
@@ -308,10 +373,12 @@ export default function ToolPage() {
                         const raw = typeof j?.raw === "string" && j.raw.trim() ? `\n${j.raw.trim()}` : "";
                         const msg = `${base}${host}${raw}`.trim();
                         if (msg) setLastError(msg);
+                        if (msg) pushLog({ level: "error", title: "download.proxy", detail: msg });
                         return;
                     }
                     if (/error|unauthorized|forbidden|blocked|failed/i.test(text)) {
                         setLastError(text.slice(0, 220));
+                        pushLog({ level: "warn", title: "download.proxy", detail: text.slice(0, 220) });
                     }
                 } catch {
                     // ignore - successful downloads won't be readable here.
@@ -354,6 +421,7 @@ export default function ToolPage() {
         } catch (e) {
             setIsDownloading(false);
             setLastError(e instanceof Error ? e.message : t(lang, "tool.downloadUrlFailed"));
+            pushLog({ level: "error", title: "download.error", detail: e instanceof Error ? e.message : "download failed" });
         }
     }
 
@@ -621,6 +689,26 @@ export default function ToolPage() {
                                         >
                                             {isDownloading ? t(lang, "status.downloading") : t(lang, "tool.downloadSelected")}
                                         </Button>
+
+                                        <div className="flex items-center justify-between">
+                                            <button
+                                                type="button"
+                                                className="text-[11px] font-semibold text-[var(--foreground)] opacity-80 hover:opacity-100 underline underline-offset-4"
+                                                onClick={() => setShowLogs((v) => !v)}
+                                            >
+                                                {showLogs ? t(lang, "tool.hideLogs") : t(lang, "tool.showLogs")}
+                                            </button>
+                                            <div className="text-[10px] font-mono text-[var(--foreground)] opacity-55">
+                                                {logs.length > 0 ? `${logs.length}` : ""}
+                                            </div>
+                                        </div>
+
+                                        {showLogs && (
+                                            <ErrorViewer
+                                                items={logs}
+                                                onClear={() => setLogs([])}
+                                            />
+                                        )}
                                     </div>
                                 </Card>
                             )}
