@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from hashlib import sha256
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
@@ -46,6 +47,38 @@ def _cookies_file_from_env() -> Optional[str]:
     return tmp.name
 
 
+def cookies_env_diagnostics() -> Dict[str, Any]:
+    """
+    Returns safe diagnostics about the cookies env without leaking cookie values.
+    """
+    path = (os.getenv("YTDLP_COOKIES_PATH") or "").strip()
+    b64 = (os.getenv("YTDLP_COOKIES_B64") or "").strip()
+    out: Dict[str, Any] = {
+        "cookies_path_set": bool(path),
+        "cookies_path_exists": bool(path and Path(path).exists()),
+        "cookies_b64_set": bool(b64),
+    }
+    if not b64:
+        return out
+
+    try:
+        raw = base64.b64decode(b64)
+        out["cookies_bytes"] = len(raw)
+        out["cookies_sha256_12"] = sha256(raw).hexdigest()[:12]
+        head = raw[:64].decode("utf-8", errors="replace")
+        out["cookies_head"] = head.replace("\r", "\\r").replace("\n", "\\n")
+        out["cookies_looks_netscape"] = ("Netscape HTTP Cookie File" in head) or head.lstrip().startswith("#")
+        # Count non-comment lines as a cheap sanity check.
+        text = raw.decode("utf-8", errors="replace")
+        lines = [ln for ln in text.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+        out["cookies_rows"] = len(lines)
+        out["cookies_has_youtube_domain"] = any(".youtube.com" in ln or "youtube.com" in ln for ln in lines[:2000])
+    except Exception as e:
+        out["cookies_decode_error"] = str(e)
+
+    return out
+
+
 def _build_common_cli_args() -> List[str]:
     args: List[str] = [
         "--no-playlist",
@@ -82,6 +115,11 @@ def _build_common_cli_args() -> List[str]:
     fragment_retries = (os.getenv("YTDLP_FRAGMENT_RETRIES") or "").strip()
     if fragment_retries.isdigit():
         args += ["--fragment-retries", fragment_retries]
+
+    # YouTube: prefer stable clients. This can help in some datacenter environments.
+    youtube_clients = (os.getenv("YTDLP_YOUTUBE_CLIENTS") or "web,android").strip()
+    if youtube_clients:
+        args += ["--extractor-args", f"youtube:player_client={youtube_clients}"]
 
     return args
 

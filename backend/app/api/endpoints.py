@@ -17,6 +17,7 @@ from app.services.supabase_service import supabase_service
 from app.services.deepseek_service import deepseek_service
 from app.services.yt_dlp_cli import (
     YtDlpError,
+    cookies_env_diagnostics,
     download_to_file,
     dump_json,
     has_ffmpeg,
@@ -417,5 +418,6 @@ async def diagnostics():
         "supabase_url_set": bool((settings.SUPABASE_URL or "").strip()),
         "supabase_service_role_key_set": bool((settings.SUPABASE_SERVICE_ROLE_KEY or "").strip()),
         "cookies_env_set": bool((os.getenv("YTDLP_COOKIES_B64") or "").strip() or (os.getenv("YTDLP_COOKIES_PATH") or "").strip()),
+        "cookies": cookies_env_diagnostics(),
         "proxy_set": bool((os.getenv("YTDLP_PROXY") or "").strip()),
     }
