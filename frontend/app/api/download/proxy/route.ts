@@ -19,7 +19,8 @@ function isAllowedProxyHost(hostname: string): boolean {
         h.endsWith('.facebook.com') ||
         h.endsWith('.x.com') ||
         h.endsWith('.twimg.com') ||
-        h.endsWith('.ytimg.com')
+        h.endsWith('.ytimg.com') ||
+        h.endsWith('.phimtatvn.com')
     );
 }
 
