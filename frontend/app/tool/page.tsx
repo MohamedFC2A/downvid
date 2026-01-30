@@ -300,8 +300,11 @@ export default function ToolPage() {
                     const end = text.lastIndexOf("}");
                     if (start >= 0 && end > start) {
                         const jsonText = text.slice(start, end + 1);
-                        const j = JSON.parse(jsonText) as { detail?: unknown; error?: unknown };
-                        const msg = (j?.detail || j?.error || "").toString().trim();
+                        const j = JSON.parse(jsonText) as { detail?: unknown; error?: unknown; host?: unknown; raw?: unknown };
+                        const base = (j?.detail || j?.error || "").toString().trim();
+                        const host = typeof j?.host === "string" && j.host.trim() ? ` (${j.host.trim()})` : "";
+                        const raw = typeof j?.raw === "string" && j.raw.trim() ? `\n${j.raw.trim()}` : "";
+                        const msg = `${base}${host}${raw}`.trim();
                         if (msg) setLastError(msg);
                         return;
                     }
