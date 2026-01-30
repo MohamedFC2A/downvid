@@ -3,6 +3,9 @@ import { getSupabaseUserClient, getUserEnv, getUserIdFromBearer } from '@/app/ap
 
 export const dynamic = 'force-dynamic';
 
+const DEFAULT_UA =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
 function isAllowedProxyHost(hostname: string): boolean {
     const h = (hostname || '').toLowerCase();
     return (
@@ -75,34 +78,65 @@ export async function POST(req: Request) {
         return NextResponse.json({ detail: 'Blocked host' }, { status: 400 });
     }
 
-    // Consume quota (FREE only). Keeps user inside the site + prevents direct link sharing.
-    const { data: rpcData, error: rpcError } = await supabase.client.rpc('consume_download', { p_user_id: userId });
-    if (rpcError) {
-        return NextResponse.json({ detail: rpcError.message }, { status: 500 });
-    }
-    const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-    if (!row?.allowed) {
-        return NextResponse.json({ detail: 'FREE limit reached' }, { status: 403 });
-    }
-
     // Stream remote bytes.
     const range = req.headers.get('range') || undefined;
-    const upstream = await fetch(u.toString(), {
-        method: 'GET',
-        headers: {
+
+    const isGoogleVideo = u.hostname === 'googlevideo.com' || u.hostname.endsWith('.googlevideo.com');
+
+    async function fetchUpstream(extraHeaders?: Record<string, string>) {
+        const headers: Record<string, string> = {
             ...(range ? { Range: range } : {}),
-            // Some hosts are picky about UA; keep it simple.
-            'User-Agent': 'DOWNVID/1.0',
-        },
-        redirect: 'follow',
-    }).catch(() => null);
+            'User-Agent': DEFAULT_UA,
+            Accept: '*/*',
+            ...(isGoogleVideo ? { Referer: 'https://www.youtube.com/', Origin: 'https://www.youtube.com' } : {}),
+            ...(extraHeaders || {}),
+        };
+        return await fetch(u.toString(), { method: 'GET', headers, redirect: 'follow' }).catch(() => null);
+    }
+
+    let upstream = await fetchUpstream();
+    // Some CDNs are picky; retry once with Range if first attempt is blocked.
+    if (upstream && !upstream.ok && upstream.status !== 206) {
+        const shouldRetry = [400, 403, 410, 429].includes(upstream.status) && !range;
+        if (shouldRetry) {
+            try {
+                await upstream.body?.cancel();
+            } catch {
+                // ignore
+            }
+            upstream = await fetchUpstream({ Range: 'bytes=0-' });
+        }
+    }
 
     if (!upstream) {
         return NextResponse.json({ detail: 'Upstream fetch failed' }, { status: 502 });
     }
     if (!upstream.ok && upstream.status !== 206) {
         const text = await upstream.text().catch(() => '');
-        return NextResponse.json({ detail: `Upstream error (${upstream.status})`, raw: text.slice(0, 200) }, { status: 502 });
+        return NextResponse.json(
+            { detail: `Upstream error (${upstream.status})`, host: u.hostname, raw: text.slice(0, 200) },
+            { status: 502 }
+        );
+    }
+
+    // Consume quota (FREE only) *after* verifying upstream is reachable, to avoid charging users on failed downloads.
+    const { data: rpcData, error: rpcError } = await supabase.client.rpc('consume_download', { p_user_id: userId });
+    if (rpcError) {
+        try {
+            await upstream.body?.cancel();
+        } catch {
+            // ignore
+        }
+        return NextResponse.json({ detail: rpcError.message }, { status: 500 });
+    }
+    const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+    if (!row?.allowed) {
+        try {
+            await upstream.body?.cancel();
+        } catch {
+            // ignore
+        }
+        return NextResponse.json({ detail: 'FREE limit reached' }, { status: 403 });
     }
 
     const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
