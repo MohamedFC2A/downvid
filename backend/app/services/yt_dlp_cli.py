@@ -81,6 +81,7 @@ def cookies_env_diagnostics() -> Dict[str, Any]:
 
 def _build_common_cli_args() -> List[str]:
     args: List[str] = [
+        "--ignore-config",
         "--no-playlist",
         "--no-warnings",
         "--geo-bypass",
