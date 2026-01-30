@@ -277,6 +277,16 @@ export default function ToolPage() {
             setAvailableFormats(data.available_formats || []);
             setAudioFormats(data.audio_formats || []);
 
+            if ((data.available_formats?.length || 0) === 0 && (data.audio_formats?.length || 0) === 0) {
+                const hint =
+                    platformDetected === "YouTube"
+                        ? (lang === "ar"
+                            ? "يوتيوب على السيرفر قد يمنع استخراج الجودات (IP داتا سنتر). جرّب رابط/منصة أخرى، أو شغّل الباكند على جهازك/سيرفر منزلي. (Proxy اختياري)."
+                            : "YouTube may block quality extraction from datacenter IPs. Try another platform, or run the backend on a home IP. (Proxy optional).")
+                        : "";
+                if (hint) setLastError(hint);
+            }
+
             const nextVideo = Array.isArray(data.available_formats) ? pickDefaultVideoFormatId(data.available_formats) : null;
             const nextAudio = Array.isArray(data.audio_formats) ? pickDefaultAudioFormatId(data.audio_formats) : null;
             const next = downloadMode === "audio" ? nextAudio : nextVideo;
@@ -290,6 +300,7 @@ export default function ToolPage() {
                 data: {
                     video_formats: Array.isArray(data.available_formats) ? data.available_formats.length : 0,
                     audio_formats: Array.isArray(data.audio_formats) ? data.audio_formats.length : 0,
+                    raw_formats: typeof (data as any)?.formats_count === "number" ? (data as any).formats_count : undefined,
                 },
             });
         } catch (e: unknown) {

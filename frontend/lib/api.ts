@@ -73,6 +73,8 @@ export type AnalyzeResult = {
     } | null;
     available_formats: VideoFormat[];
     audio_formats: VideoFormat[];
+    formats_count?: number;
+    playable_formats_count?: number;
 };
 
 type BackendFormat = {
@@ -97,6 +99,8 @@ type BackendAnalyzeResponse = {
     description?: string | null;
     duration?: number | null;
     formats: BackendFormat[];
+    formats_count?: number;
+    playable_formats_count?: number;
     analysis?: AnalyzeResult["analysis"] | null;
 };
 
@@ -140,6 +144,9 @@ export async function analyzeVideo(url: string, opts?: { ai?: boolean; lang?: st
         analysis: json.analysis ?? null,
         available_formats,
         audio_formats,
+        // optional debug counters (not used by UI yet)
+        formats_count: typeof json.formats_count === "number" ? json.formats_count : formats.length,
+        playable_formats_count: typeof json.playable_formats_count === "number" ? json.playable_formats_count : undefined,
     } satisfies AnalyzeResult;
 }
 

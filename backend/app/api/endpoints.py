@@ -134,6 +134,8 @@ class AnalyzeResponse(BaseModel):
     description: Optional[str] = None
     duration: Optional[float] = None
     formats: List[QualityFormat]
+    formats_count: int = 0
+    playable_formats_count: int = 0
     analysis: Optional[dict[str, Any]] = None
 
 
@@ -217,6 +219,8 @@ async def analyze_video(req: AnalyzeRequest, ai: bool = False, lang: str = "ar",
             description=description,
             duration=duration_val,
             formats=out_formats,
+            formats_count=len(out_formats),
+            playable_formats_count=len(playable),
             analysis=analysis,
         )
     except YtDlpError as e:
