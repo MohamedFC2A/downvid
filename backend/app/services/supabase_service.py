@@ -68,6 +68,15 @@ class SupabaseService:
             "Content-Type": "application/json",
         }
 
+    def _raise_for_status(self, res: httpx.Response, *, context: str) -> None:
+        try:
+            res.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            detail = (res.text or "").strip()
+            if len(detail) > 900:
+                detail = detail[:900] + "..."
+            raise RuntimeError(f"{context}: HTTP {res.status_code}: {detail}") from e
+
     async def get_or_create_profile(self, user_id: str) -> Profile:
         if not self._enabled():
             return Profile(user_id=user_id, plan="ultimate", downloads_used=0, ultimate_until=None)
@@ -83,7 +92,7 @@ class SupabaseService:
                 params={"user_id": f"eq.{user_id}", "select": "user_id,plan,downloads_used,ultimate_until"},
                 timeout=15.0,
             )
-            res.raise_for_status()
+            self._raise_for_status(res, context="Supabase get profile failed")
             rows = res.json() or []
             if rows:
                 row = rows[0]
@@ -101,7 +110,7 @@ class SupabaseService:
                 json={"user_id": user_id},
                 timeout=15.0,
             )
-            insert.raise_for_status()
+            self._raise_for_status(insert, context="Supabase create profile failed")
             created = (insert.json() or [{}])[0]
             return Profile(
                 user_id=str(created.get("user_id") or user_id),
@@ -135,7 +144,7 @@ class SupabaseService:
                 },
                 timeout=15.0,
             )
-            res.raise_for_status()
+            self._raise_for_status(res, context="Supabase set plan failed")
             row = (res.json() or [{}])[0]
             return Profile(
                 user_id=str(row.get("user_id") or user_id),
@@ -157,7 +166,7 @@ class SupabaseService:
 
         async with httpx.AsyncClient() as client:
             res = await client.post(endpoint, headers=headers, json={"p_user_id": user_id}, timeout=15.0)
-            res.raise_for_status()
+            self._raise_for_status(res, context="Supabase consume_download RPC failed")
             # PostgREST returns an array for SETOF-returning functions
             payload = res.json()
             if isinstance(payload, list) and payload:
@@ -179,7 +188,7 @@ class SupabaseService:
                 json={"p_user_id": user_id, "p_code": code},
                 timeout=15.0,
             )
-            res.raise_for_status()
+            self._raise_for_status(res, context="Supabase redeem_promo_code RPC failed")
             payload = res.json()
             if isinstance(payload, list) and payload:
                 return payload[0]

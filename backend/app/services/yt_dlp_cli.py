@@ -50,10 +50,7 @@ def _build_common_cli_args() -> List[str]:
     args: List[str] = [
         "--no-playlist",
         "--no-warnings",
-        "--no-call-home",
         "--geo-bypass",
-        "--youtube-include-dash-manifest",
-        "--youtube-include-hls-manifest",
     ]
 
     proxy = (os.getenv("YTDLP_PROXY") or "").strip()
@@ -120,6 +117,12 @@ def dump_json(url: str) -> Dict[str, Any]:
         code, out, err = _run_yt_dlp([*args, url], timeout_s=60)
         if code != 0:
             msg = (err or out or "").strip()
+            lowered = msg.lower()
+            if "sign in to confirm you’re not a bot" in msg or "sign in to confirm you're not a bot" in msg or "not a bot" in lowered:
+                raise YtDlpError(
+                    "YouTube requires valid cookies for this request (bot check). "
+                    "Update YTDLP_COOKIES_B64 / YTDLP_COOKIES_PATH with fresh exported cookies."
+                )
             raise YtDlpError(msg or f"yt-dlp failed (exit {code})")
         try:
             # yt-dlp may output multiple lines; take the first JSON object line.
@@ -274,6 +277,12 @@ def download_to_file(*, url: str, selector: str, out_dir: Path, timeout_s: int =
         code, out, err = _run_yt_dlp([*args, url], timeout_s=timeout_s)
         if code != 0:
             msg = (err or out or "").strip()
+            lowered = msg.lower()
+            if "sign in to confirm you’re not a bot" in msg or "sign in to confirm you're not a bot" in msg or "not a bot" in lowered:
+                raise YtDlpError(
+                    "YouTube requires valid cookies for this download (bot check). "
+                    "Update YTDLP_COOKIES_B64 / YTDLP_COOKIES_PATH with fresh exported cookies."
+                )
             raise YtDlpError(msg or f"yt-dlp download failed (exit {code})")
 
         # Pick the newest / largest file as output.

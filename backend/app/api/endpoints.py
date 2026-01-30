@@ -325,7 +325,14 @@ async def download(request: Request, background: BackgroundTasks, authorization:
         try:
             quota = await supabase_service.consume_download(user_id)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Subscription check failed: {e}")
+            admin_log.add("subscription_error", {"error": str(e)})
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Subscription check failed: {e}. "
+                    "Make sure you applied `backend/supabase/schema.sql` in your Supabase project."
+                ),
+            )
         if not bool(quota.get("allowed")):
             raise HTTPException(status_code=403, detail="FREE limit reached")
 
