@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { InsightsPanel } from "@/components/modules/ai/InsightsPanel";
 import { QualitySelector, type VideoFormat } from "@/components/QualitySelector";
-import { analyzeVideo, type AnalyzeResult } from "@/lib/api";
+import { analyzeVideo, downloadSelected, type AnalyzeResult } from "@/lib/api";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -15,6 +15,7 @@ import { t } from "@/lib/i18n";
 import { PlatformIcon, type PlatformId } from "@/components/PlatformIcon";
 import { clampFormats, clearToolState, loadToolState, saveToolState } from "@/lib/toolState";
 import { ErrorViewer, type DebugLogItem } from "@/components/modules/debug/ErrorViewer";
+import { apiUrl } from "@/lib/backend";
 
 const LAST_SELECTION_KEY = "downvid:lastSelection:v1";
 const TOOL_STATE_DEBOUNCE_MS = 500;
@@ -37,8 +38,6 @@ export default function ToolPage() {
     const [platformDetected, setPlatformDetected] = useState<string | null>(null);
     const [lastError, setLastError] = useState<string>("");
     const [isDownloading, setIsDownloading] = useState(false);
-    const [pendingDownloadUrl, setPendingDownloadUrl] = useState<string | null>(null);
-    const [popupBlocked, setPopupBlocked] = useState(false);
     const [showLogs, setShowLogs] = useState(false);
     const [logs, setLogs] = useState<DebugLogItem[]>([]);
     const isDataSaver = settings.dataSaver;
@@ -195,7 +194,7 @@ export default function ToolPage() {
     }
 
     function hasDownloadLink(fmt: VideoFormat | null | undefined): boolean {
-        return Boolean(fmt?.url && String(fmt.url).startsWith("http"));
+        return Boolean(fmt?.format_id && String(fmt.format_id).trim().length > 0);
     }
 
     function hasAudio(fmt: VideoFormat): boolean {
@@ -312,7 +311,7 @@ export default function ToolPage() {
             setLastError(t(lang, "subs.loginRequired"));
             return;
         }
-        if (!selectedFormatId || !selectedFormat?.url) {
+        if (!selectedFormatId || !selectedFormat || !isUrlValid) {
             setLastError(t(lang, "tool.pickFormat"));
             return;
         }
@@ -323,8 +322,6 @@ export default function ToolPage() {
 
         setLastError("");
         setIsDownloading(true);
-        setPendingDownloadUrl(null);
-        setPopupBlocked(false);
         try {
             pushLog({
                 level: "info",
@@ -334,7 +331,7 @@ export default function ToolPage() {
                     format_id: selectedFormatId,
                     url_host: (() => {
                         try {
-                            return new URL(String(selectedFormat.url)).host;
+                            return new URL(urlTrimmed).host;
                         } catch {
                             return "invalid";
                         }
@@ -351,134 +348,39 @@ export default function ToolPage() {
                 .replace(/\s+/g, " ")
                 .trim()
                 .slice(0, 90);
-            const filename = `${base}${resolution ? `_${resolution}` : ""}.${ext}`;
+            const fallbackFilename = `${base}${resolution ? `_${resolution}` : ""}.${ext}`;
 
-            // Download via same-origin POST to avoid sending users to googlevideo URLs.
-            const iframeName = "downvid_download_iframe";
-            let iframe = document.getElementById(iframeName) as HTMLIFrameElement | null;
-            if (!iframe) {
-                iframe = document.createElement("iframe");
-                iframe.name = iframeName;
-                iframe.id = iframeName;
-                iframe.style.display = "none";
-                document.body.appendChild(iframe);
-            }
-            iframe.onload = () => {
-                try {
-                    const text = iframe?.contentDocument?.body?.innerText?.trim() || "";
-                    if (!text) return;
-                    const start = text.indexOf("{");
-                    const end = text.lastIndexOf("}");
-                    if (start >= 0 && end > start) {
-                        const jsonText = text.slice(start, end + 1);
-                        const j = JSON.parse(jsonText) as { detail?: unknown; error?: unknown; host?: unknown; raw?: unknown };
-                        const base = (j?.detail || j?.error || "").toString().trim();
-                        const host = typeof j?.host === "string" && j.host.trim() ? ` (${j.host.trim()})` : "";
-                        const raw = typeof j?.raw === "string" && j.raw.trim() ? `\n${j.raw.trim()}` : "";
-                        const msg = `${base}${host}${raw}`.trim();
-                        if (msg) setLastError(msg);
-                        if (msg) pushLog({ level: "error", title: "download.proxy", detail: msg });
-                        return;
-                    }
-                    if (/error|unauthorized|forbidden|blocked|failed/i.test(text)) {
-                        setLastError(text.slice(0, 220));
-                        pushLog({ level: "warn", title: "download.proxy", detail: text.slice(0, 220) });
-                    }
-                } catch {
-                    // ignore - successful downloads won't be readable here.
-                } finally {
-                    setIsDownloading(false);
-                }
-            };
+            pushLog({ level: "info", title: "download.endpoint", data: { endpoint: "/api/download" } });
 
-            const urlHost = (() => {
-                try {
-                    return new URL(String(selectedFormat.url)).host.toLowerCase();
-                } catch {
-                    return "";
-                }
-            })();
-            const isGoogleVideo = urlHost === "googlevideo.com" || urlHost.endsWith(".googlevideo.com");
-            const endpoint = isGoogleVideo ? "/api/download/redirect" : "/api/download/proxy";
-            pushLog({ level: "info", title: "download.endpoint", data: { endpoint, urlHost } });
+            const { blob, filename } = await downloadSelected({
+                url: urlTrimmed,
+                selected_format_id: selectedFormatId,
+                mode: downloadMode,
+            });
 
-            if (isGoogleVideo) {
-                const headers: Record<string, string> = { "Content-Type": "application/json" };
-                if (auth.accessToken) headers.Authorization = `Bearer ${auth.accessToken}`;
-
-                const res = await fetch("/api/download/redirect", {
-                    method: "POST",
-                    headers,
-                    body: JSON.stringify({ url: selectedFormat.url }),
-                });
-                const json = await res.json().catch(() => null);
-                if (!res.ok) {
-                    const msg = (json?.detail || json?.error || `Download failed (${res.status})`).toString();
-                    setLastError(msg);
-                    pushLog({ level: "error", title: "download.redirect", detail: msg, data: json || undefined });
-                    setIsDownloading(false);
-                    return;
-                }
-
-                const redirectTo = (json?.redirect_to || "").toString().trim();
-                if (!redirectTo.startsWith("http")) {
-                    const msg = "Invalid redirect URL";
-                    setLastError(msg);
-                    pushLog({ level: "error", title: "download.redirect", detail: msg, data: json || undefined });
-                    setIsDownloading(false);
-                    return;
-                }
-
-                setPendingDownloadUrl(redirectTo);
-                const w = window.open(redirectTo, "_blank", "noopener,noreferrer");
-                if (!w) {
-                    setPopupBlocked(true);
-                    setLastError(t(lang, "tool.popupBlocked"));
-                    pushLog({ level: "warn", title: "download.popup_blocked", detail: redirectTo });
-                } else {
-                    pushLog({ level: "info", title: "download.opened", detail: redirectTo });
-                }
-
-                window.setTimeout(() => void entitlements.refresh(), 800);
-                setIsDownloading(false);
-                return;
-            }
-
-            const form = document.createElement("form");
-            form.method = "POST";
-            form.action = endpoint;
-            form.target = iframeName;
-            form.style.display = "none";
-
-            const inUrl = document.createElement("input");
-            inUrl.type = "hidden";
-            inUrl.name = "url";
-            inUrl.value = selectedFormat.url;
-            form.appendChild(inUrl);
-
-            const inName = document.createElement("input");
-            inName.type = "hidden";
-            inName.name = "filename";
-            inName.value = filename;
-            form.appendChild(inName);
-
-            const inToken = document.createElement("input");
-            inToken.type = "hidden";
-            inToken.name = "access_token";
-            inToken.value = auth.accessToken || "";
-            form.appendChild(inToken);
-
-            document.body.appendChild(form);
-            form.submit();
-            form.remove();
+            const finalName = (filename || fallbackFilename).toString().trim() || fallbackFilename;
+            const href = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = href;
+            a.download = finalName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.setTimeout(() => URL.revokeObjectURL(href), 2000);
 
             window.setTimeout(() => void entitlements.refresh(), 800);
-            // Best-effort: avoid leaving UI stuck if the browser doesn't fire iframe events on downloads.
-            window.setTimeout(() => setIsDownloading(false), 2500);
+            setIsDownloading(false);
         } catch (e) {
             setIsDownloading(false);
             setLastError(e instanceof Error ? e.message : t(lang, "tool.downloadUrlFailed"));
             pushLog({ level: "error", title: "download.error", detail: e instanceof Error ? e.message : "download failed" });
+            try {
+                const res = await fetch(apiUrl("/diagnostics"));
+                const json = await res.json().catch(() => null);
+                pushLog({ level: res.ok ? "info" : "warn", title: "server.diagnostics", data: json || undefined });
+            } catch {
+                // ignore diagnostics failure
+            }
         }
     }
 
@@ -750,32 +652,6 @@ export default function ToolPage() {
                                         <div className="text-[11px] text-[var(--foreground)] opacity-60">
                                             {t(lang, "tool.downloadNote")}
                                         </div>
-
-                                        {(popupBlocked || pendingDownloadUrl) && (
-                                            <div className="flex items-center gap-2">
-                                                <Button
-                                                    variant="secondary"
-                                                    className="h-10 px-4 text-xs"
-                                                    onClick={() => {
-                                                        if (!pendingDownloadUrl) return;
-                                                        window.open(pendingDownloadUrl, "_blank", "noopener,noreferrer");
-                                                    }}
-                                                    disabled={!pendingDownloadUrl}
-                                                >
-                                                    {t(lang, "tool.openDownload")}
-                                                </Button>
-                                                {pendingDownloadUrl && (
-                                                    <a
-                                                        href={pendingDownloadUrl}
-                                                        target="_blank"
-                                                        rel="noreferrer noopener"
-                                                        className="text-[11px] underline underline-offset-4 text-[var(--foreground)] opacity-70 hover:opacity-100 truncate max-w-[60%]"
-                                                    >
-                                                        {pendingDownloadUrl}
-                                                    </a>
-                                                )}
-                                            </div>
-                                        )}
 
                                         <div className="flex items-center justify-between">
                                             <button

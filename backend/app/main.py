@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import endpoints
 from app.core.config import settings
 from app.services import ffmpeg_utils
+from app.services.yt_dlp_cli import is_serverless_runtime
 
 # Configure logging
 logging.basicConfig(
@@ -42,7 +43,11 @@ logger.info(f"Downloads path configured as: {downloads_path}")
 async def startup_event():
     """Initialize application on startup."""
     logger.info("=== DOWNVID API Starting ===")
-    
+
+    if is_serverless_runtime():
+        logger.warning("Serverless runtime detected - skipping FFmpeg checks/installation.")
+        return
+
     # Check FFmpeg availability
     logger.info("Checking FFmpeg availability...")
     if ffmpeg_utils.is_ffmpeg_in_path():

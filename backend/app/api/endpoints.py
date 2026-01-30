@@ -1,58 +1,99 @@
-from fastapi import APIRouter, Header, Request, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import List, Optional
-from pathlib import Path
-from app.api.websocket import manager
-from app.core.config import settings
-from app.core.admin_log import admin_log
-from app.core.auth import get_user_id_from_authorization, require_user_id, require_ultimate, resolve_user_id
-from app.services.ytdlp_service import YtDlpService, VideoFormat
-from app.services.deepseek_service import deepseek_service
-from app.services.replicate_upscale_service import MODEL_MAP, replicate_upscale_service
-from app.services.supabase_service import supabase_service
-import yt_dlp
-import shutil
+from __future__ import annotations
+
 import os
-import time
+import tempfile
+from pathlib import Path
+from typing import Any, List, Literal, Optional
+
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field, field_validator
+from starlette.background import BackgroundTask
+
+from app.core.config import settings
+from app.core.auth import require_user_id
+from app.core.admin_log import admin_log
+from app.services.supabase_service import supabase_service
+from app.services.deepseek_service import deepseek_service
+from app.services.yt_dlp_cli import (
+    YtDlpError,
+    download_to_file,
+    dump_json,
+    has_ffmpeg,
+    is_serverless_runtime,
+    normalize_formats,
+    validate_format_selector,
+)
 
 router = APIRouter()
-ytdlp_service = YtDlpService()
 
 
-# Health check endpoint for container platforms
 @router.get("/health")
 async def health_check():
-    """Health check endpoint."""
     return {"status": "healthy", "service": "downvid-api"}
 
 
-def _public_base_url(request: Request) -> str:
-    configured = (settings.PUBLIC_BASE_URL or "").strip()
-    if configured:
-        return configured.rstrip("/")
-    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "http").split(",")[0].strip()
-    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc).split(",")[0].strip()
-    return f"{proto}://{host}"
+@router.get("/me")
+async def me(authorization: str | None = Header(default=None)):
+    if not settings.SUPABASE_ENABLED:
+        return {
+            "plan": "ultimate",
+            "downloads_used": 0,
+            "downloads_remaining": None,
+            "ultimate_until": None,
+            "ai_enabled": True,
+        }
+
+    user_id = await require_user_id(authorization)
+    profile = await supabase_service.get_or_create_profile(user_id)
+    return {
+        "plan": profile.effective_plan,
+        "downloads_used": profile.downloads_used,
+        "downloads_remaining": profile.downloads_remaining,
+        "ultimate_until": profile.ultimate_until,
+        "ai_enabled": profile.ai_enabled,
+    }
 
 
-def _cleanup_old_downloads(downloads_dir: Path) -> None:
-    ttl_hours = int(getattr(settings, "DOWNLOAD_TTL_HOURS", 0) or 0)
-    if ttl_hours <= 0:
-        return
-    cutoff = time.time() - (ttl_hours * 60 * 60)
+class RedeemRequest(BaseModel):
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def _validate_code(cls, v: str) -> str:
+        v = (v or "").strip()
+        if len(v) < 4:
+            raise ValueError("Invalid code")
+        return v
+
+
+@router.post("/promo/redeem")
+async def redeem_promo(request: Request, authorization: str | None = Header(default=None)):
+    if not settings.SUPABASE_ENABLED:
+        return {"success": True, "message": "Ultimate activated", "plan": "ultimate", "ultimate_until": None}
+
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" in content_type:
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
+    else:
+        form = await request.form()
+        payload = {"code": str(form.get("code") or "")}
+
     try:
-        for p in downloads_dir.iterdir():
-            if not p.is_file():
-                continue
-            try:
-                if p.stat().st_mtime < cutoff:
-                    p.unlink(missing_ok=True)
-            except Exception:
-                continue
-    except Exception:
-        # Cleanup must never block requests.
-        return
+        req = RedeemRequest.model_validate(payload)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    user_id = await require_user_id(authorization)
+    try:
+        out = await supabase_service.redeem_promo_code(user_id=user_id, code=req.code)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Redeem failed: {e}")
+    return out
+
 
 class AnalyzeRequest(BaseModel):
     url: str
@@ -69,542 +110,139 @@ class AnalyzeRequest(BaseModel):
             raise ValueError("URL must start with http:// or https://")
         return v
 
+
+class QualityFormat(BaseModel):
+    format_id: str
+    container: str = Field(description="mp4/webm/m4a/opus/etc")
+    video_codec: Optional[str]
+    audio_codec: Optional[str]
+    width: Optional[int]
+    height: Optional[int]
+    fps: Optional[float]
+    vbr: Optional[float]
+    abr: Optional[float]
+    tbr: Optional[float]
+    filesize: Optional[int]
+    filesize_approx: Optional[int]
+    kind: Literal["muxed", "video_only", "audio_only", "unknown"]
+
+
 class AnalyzeResponse(BaseModel):
     title: str
-    thumbnail: Optional[str]
-    description: Optional[str]
-    analysis: Optional[dict]
-    available_formats: List[VideoFormat]
-    audio_formats: List[VideoFormat]
+    thumbnail: Optional[str] = None
+    description: Optional[str] = None
+    duration: Optional[float] = None
+    formats: List[QualityFormat]
+    analysis: Optional[dict[str, Any]] = None
 
-class SummarizeRequest(BaseModel):
-    url: str
-
-    @field_validator("url")
-    @classmethod
-    def _validate_url3(cls, v: str) -> str:
-        v = (v or "").strip()
-        if not v:
-            raise ValueError("URL is required")
-        if len(v) > 2048:
-            raise ValueError("URL is too long")
-        if not (v.startswith("http://") or v.startswith("https://")):
-            raise ValueError("URL must start with http:// or https://")
-        return v
-
-
-class DiagnoseRequest(BaseModel):
-    stage: str
-    url: str
-    error: str
-    context: dict = {}
-
-    @field_validator("stage")
-    @classmethod
-    def _validate_stage(cls, v: str) -> str:
-        v = (v or "").strip().lower()
-        if v not in {"analyze", "download", "ws", "other"}:
-            return "other"
-        return v
-
-    @field_validator("url")
-    @classmethod
-    def _validate_url2(cls, v: str) -> str:
-        v = (v or "").strip()
-        if not v:
-            return ""
-        if len(v) > 2048:
-            return v[:2048]
-        return v
-
-    @field_validator("error")
-    @classmethod
-    def _validate_error(cls, v: str) -> str:
-        v = (v or "").strip()
-        if len(v) > 5000:
-            return v[:5000]
-        return v
-
-@router.websocket("/download/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"WebSocket connection attempt from client: {client_id}")
-
-    access_token = websocket.query_params.get("access_token")
-    user_id = None
-    if access_token:
-        user_id = await resolve_user_id(f"Bearer {access_token}")
-    
-    await manager.connect(websocket, client_id)
-    logger.info(f"WebSocket connected: {client_id}")
-    admin_log.add("ws_connected", {"client_id": client_id})
-    
-    try:
-        while True:
-            data = await websocket.receive_json()
-            logger.debug(f"Received from {client_id}: {data}")
-            
-            # Expecting: { action: "start_download", url: "...", format_id: "...", mode: "video"|"audio" }
-            if data.get("action") == "start_download":
-                if settings.SUPABASE_ENABLED and not user_id:
-                    await manager.send_personal_message(
-                        {"status": "error", "error": "Login required to download (Supabase)"},
-                        client_id,
-                    )
-                    continue
-
-                url = (data.get("url") or "").strip()
-                format_id = data.get("format_id")
-                mode = data.get("mode", "video")
-                container = data.get("container")
-                height = data.get("height")
-                
-                if url and (url.startswith("http://") or url.startswith("https://")):
-                    if settings.SUPABASE_ENABLED and user_id:
-                        try:
-                            quota = await supabase_service.consume_download(user_id)
-                            if not bool(quota.get("allowed")):
-                                remaining = quota.get("downloads_remaining")
-                                await manager.send_personal_message(
-                                    {
-                                        "status": "error",
-                                        "error": f"FREE limit reached (5 downloads). Remaining: {remaining}",
-                                    },
-                                    client_id,
-                                )
-                                continue
-                        except Exception as e:
-                            await manager.send_personal_message(
-                                {"status": "error", "error": f"Subscription check failed: {e}"},
-                                client_id,
-                            )
-                            continue
-
-                    logger.info(f"Starting download for {client_id}: {url}")
-                    await ytdlp_service.download_video(
-                        url=url,
-                        client_id=client_id,
-                        format_id=format_id,
-                        mode=mode,
-                        container=container,
-                        height=height,
-                    )
-                else:
-                    await manager.send_personal_message({
-                        "status": "error",
-                        "error": "Invalid URL"
-                    }, client_id)
-            
-            # Legacy fallback
-            elif "url" in data and "action" not in data:
-                pass
-
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected: {client_id}")
-        manager.disconnect(client_id)
-        admin_log.add("ws_disconnected", {"client_id": client_id})
-    except Exception as e:
-        logger.error(f"WebSocket error for {client_id}: {e}")
-        manager.disconnect(client_id)
-        admin_log.add("ws_error", {"client_id": client_id, "error": str(e)})
 
 @router.post("/analyze", response_model=AnalyzeResponse)
-async def analyze_video(
-    request: AnalyzeRequest,
-    ai: bool = True,
-    lang: str = "ar",
-    authorization: str | None = Header(default=None),
-):
+async def analyze_video(req: AnalyzeRequest, ai: bool = False, lang: str = "ar", authorization: str | None = Header(default=None)):
     try:
-        if ai and settings.SUPABASE_ENABLED:
-            user_id = await require_user_id(authorization)
-            profile = await supabase_service.get_or_create_profile(user_id)
-            require_ultimate(profile.ai_enabled)
+        info = dump_json(req.url)
+        formats = normalize_formats(info)
+        out_formats: List[QualityFormat] = []
+        for f in formats:
+            if f.is_muxed:
+                kind: Literal["muxed", "video_only", "audio_only", "unknown"] = "muxed"
+            elif f.is_video_only:
+                kind = "video_only"
+            elif f.is_audio_only:
+                kind = "audio_only"
+            else:
+                kind = "unknown"
+            out_formats.append(
+                QualityFormat(
+                    format_id=f.format_id,
+                    container=f.container,
+                    video_codec=f.video_codec,
+                    audio_codec=f.audio_codec,
+                    width=f.width,
+                    height=f.height,
+                    fps=f.fps,
+                    vbr=f.vbr,
+                    abr=f.abr,
+                    tbr=f.tbr,
+                    filesize=f.filesize,
+                    filesize_approx=f.filesize_approx,
+                    kind=kind,
+                )
+            )
 
-        # 1. Get Metadata & Formats
-        info = await ytdlp_service.get_video_info(request.url)
-        title = info.get('title', 'Unknown Title')
-        description = info.get('description', 'No description')
-        
-        analysis = None
+        title = str(info.get("title") or "Video")
+        thumbnail = info.get("thumbnail")
+        description_raw = info.get("description") or info.get("full_description") or ""
+        description = str(description_raw).strip() or None
+        duration = info.get("duration")
+        duration_val: Optional[float] = None
+        try:
+            duration_val = float(duration) if duration is not None else None
+        except Exception:
+            duration_val = None
+
+        analysis: Optional[dict[str, Any]] = None
         if ai:
-            # 2. AI Process
-            lang_norm = (lang or "ar").strip().lower()
-            if lang_norm not in ("ar", "en"):
-                lang_norm = "ar"
-            analysis = await deepseek_service.analyze_metadata(title, description, lang=lang_norm)
-        
+            if settings.SUPABASE_ENABLED:
+                user_id = await require_user_id(authorization)
+                profile = await supabase_service.get_or_create_profile(user_id)
+                if profile.ai_enabled:
+                    analysis = await deepseek_service.analyze_metadata(title, description or "", lang=lang)
+            else:
+                analysis = await deepseek_service.analyze_metadata(title, description or "", lang=lang)
+
         admin_log.add(
             "analyze",
             {
                 "title": title,
                 "extractor": info.get("extractor"),
                 "id": info.get("id"),
-                "formats_count": info.get("formats_count"),
-                "video_formats": info.get("available_formats", [])[:10],
-                "audio_formats": info.get("audio_formats", [])[:10],
+                "formats_count": len(out_formats),
+                "ai": bool(ai),
             },
         )
 
-        return {
-            "title": title,
-            "thumbnail": info.get('thumbnail'),
-            "description": description,
-            "analysis": analysis,
-            "available_formats": info.get("available_formats", []),
-            "audio_formats": info.get("audio_formats", [])
-        }
+        return AnalyzeResponse(
+            title=title,
+            thumbnail=str(thumbnail) if thumbnail else None,
+            description=description,
+            duration=duration_val,
+            formats=out_formats,
+            analysis=analysis,
+        )
+    except YtDlpError as e:
+        admin_log.add("analyze_error", {"url": req.url, "error": str(e)})
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        msg = str(e)
-        admin_log.add("analyze_error", {"url": request.url, "error": msg})
-        if msg.startswith("RapidAPI provider failed:"):
-            raise HTTPException(
-                status_code=502,
-                detail=(
-                    "RapidAPI provider failed. "
-                    "Fix: verify RAPIDAPI_KEY, RAPIDAPI_HOST, and RAPIDAPI_SNAP_HOST; "
-                    "check RapidAPI quota/limits; then retry."
-                ),
-            )
-        # YouTube bot-check / sign-in challenge
-        if "confirm you" in msg.lower() and "not a bot" in msg.lower():
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "YouTube requires sign-in verification (not-a-bot check). "
-                    "Fix: provide cookies (YTDLP_COOKIES_PATH or YTDLP_COOKIES_B64) "
-                    "and/or use a residential proxy (YTDLP_PROXY). "
-                    "Check /api/diagnostics to confirm cookies are detected."
-                ),
-            )
-        # Provide actionable hints for the most common YouTube extractor failure
-        if "Failed to extract any player response" in msg or "player response" in msg.lower():
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "YouTube extraction failed (no player response). "
-                    "Fix: ensure yt-dlp is updated, a JS runtime is available (Deno), "
-                    "and provide cookies if needed (YTDLP_COOKIES_PATH or YTDLP_COOKIES_B64). "
-                    "Check /api/diagnostics for runtime status."
-                ),
-            )
-        raise HTTPException(status_code=400, detail=msg)
+        admin_log.add("analyze_error", {"url": req.url, "error": str(e)})
+        raise HTTPException(status_code=500, detail="Analyze failed")
 
 
 @router.post("/summarize")
-async def summarize_video(
-    req: SummarizeRequest,
-    ai: bool = True,
-    lang: str = "ar",
-    authorization: str | None = Header(default=None),
-):
-    """
-    User-triggered "Summarize video" action.
-    Best-effort: tries transcript via yt-dlp subtitles; falls back to metadata.
-    """
-    info = await ytdlp_service.get_video_info(req.url)
-    title = info.get("title") or "Video"
-    description = info.get("description") or ""
-
-    lang_norm = (lang or "ar").strip().lower()
-    if lang_norm not in ("ar", "en"):
-        lang_norm = "ar"
-
-    transcript_text = await ytdlp_service.get_transcript_text(req.url, lang=lang_norm)
-    if not ai:
-        return {
-            "source": "metadata_fallback",
-            "summary": [],
-            "key_moments": [],
-            "takeaways": [],
-            "hashtags": [],
-            "topics": [],
-            "notes": "AI disabled",
-        }
-
+async def summarize(req: AnalyzeRequest, lang: str = "ar", authorization: str | None = Header(default=None)):
     if settings.SUPABASE_ENABLED:
         user_id = await require_user_id(authorization)
         profile = await supabase_service.get_or_create_profile(user_id)
-        require_ultimate(profile.ai_enabled)
-
-    result = await deepseek_service.summarize_video(
-        title=title,
-        description=description,
-        transcript_text=transcript_text,
-        lang=lang_norm,
-    )
-    result["title"] = title
-    result["has_transcript"] = bool(transcript_text)
-    return result
-
-
-@router.get("/admin/logs")
-async def get_admin_logs(
-    limit: int = 200,
-    x_admin_token: str | None = Header(default=None),
-):
-    if settings.ADMIN_TOKEN and x_admin_token != settings.ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    # clamp to avoid huge payloads
-    limit = max(1, min(500, int(limit)))
-    return {"items": admin_log.list(limit=limit)}
-
-
-@router.get("/diagnostics")
-async def diagnostics():
-    """Lightweight runtime diagnostics (no secrets)."""
-    ytdlp_version = getattr(getattr(yt_dlp, "version", None), "__version__", None)
-    env_cookie_path = (os.getenv("YTDLP_COOKIES_PATH") or "").strip()
-    env_cookie_b64 = (os.getenv("YTDLP_COOKIES_B64") or "").strip()
-    cookies_path = Path(env_cookie_path) if env_cookie_path else Path("backend/cookies.txt")
-    if not cookies_path.exists():
-        cookies_path = Path("cookies.txt")
-    has_cookie_file = cookies_path.exists()
-    return {
-        "yt_dlp_version": ytdlp_version,
-        "has_deno": shutil.which("deno") is not None,
-        "has_ffmpeg": shutil.which("ffmpeg") is not None,
-        "download_provider": (settings.DOWNLOAD_PROVIDER or "ytdlp"),
-        "rapidapi_configured": bool((settings.RAPIDAPI_KEY or "").strip()),
-        "rapidapi_host": (settings.RAPIDAPI_HOST or ""),
-        "rapidapi_snap_host": (settings.RAPIDAPI_SNAP_HOST or ""),
-        "cookies_env_set": bool(env_cookie_b64 or env_cookie_path),
-        "cookies_file_found": has_cookie_file,
-        "proxy_set": bool((os.getenv("YTDLP_PROXY") or "").strip()),
-        "force_ipv4": (os.getenv("YTDLP_FORCE_IPV4") or "").strip().lower() in ("1", "true", "yes"),
-        "force_ipv6": (os.getenv("YTDLP_FORCE_IPV6") or "").strip().lower() in ("1", "true", "yes"),
-    }
-
-
-@router.post("/ai/diagnose")
-async def ai_diagnose(req: DiagnoseRequest, authorization: str | None = Header(default=None)):
-    if settings.SUPABASE_ENABLED:
-        user_id = await require_user_id(authorization)
-        profile = await supabase_service.get_or_create_profile(user_id)
-        require_ultimate(profile.ai_enabled)
-    if not settings.DEEPSEEK_API_KEY:
-        raise HTTPException(status_code=503, detail="DEEPSEEK_API_KEY is not configured on the server")
-    # Attach a small amount of recent admin logs for context (sanitized)
-    recent = admin_log.list(limit=30)
-    ytdlp_version = getattr(getattr(yt_dlp, "version", None), "__version__", None)
-    context = {
-        "runtime": {
-            "yt_dlp_version": ytdlp_version,
-            "has_deno": shutil.which("deno") is not None,
-            "has_ffmpeg": shutil.which("ffmpeg") is not None,
-        },
-        "recent_events": recent,
-        "client_context": req.context or {},
-    }
-
-    admin_log.add("ai_diagnose_request", {"stage": req.stage, "url": req.url, "error": req.error[:300]})
-    result = await deepseek_service.diagnose_error(stage=req.stage, url=req.url, error=req.error, context=context)
-    admin_log.add("ai_diagnose_result", {"stage": req.stage, "root_cause": result.get("root_cause"), "confidence": result.get("confidence")})
-    return result
-
-
-@router.get("/ai/diagnose")
-async def ai_diagnose_get(
-    stage: str = "other",
-    url: str = "",
-    error: str = "",
-    authorization: str | None = Header(default=None),
-):
-    """
-    GET fallback for environments where POST is blocked/misrouted.
-    Note: URL + error are truncated server-side by validation in DiagnoseRequest.
-    """
-    req = DiagnoseRequest(stage=stage, url=url, error=error, context={})
-    return await ai_diagnose(req, authorization=authorization)
-
-
-class UpscaleRequest(BaseModel):
-    model_config = {"populate_by_name": True}
-
-    file_token: Optional[str] = Field(default=None, alias="fileToken")
-    video_url: Optional[str] = Field(default=None, alias="videoUrl")
-    model: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _validate(self):
-        if not (self.file_token or self.video_url):
-            raise ValueError("fileToken or videoUrl is required")
-        return self
-
-
-@router.get("/upscale")
-async def upscale_info():
-    return {
-        "enabled": bool((settings.REPLICATE_API_TOKEN or "").strip()),
-        "models": sorted(list(MODEL_MAP.keys())),
-    }
-
-
-@router.post("/upscale")
-async def upscale_start(payload: UpscaleRequest, request: Request, authorization: str | None = Header(default=None)):
-    if settings.SUPABASE_ENABLED:
-        user_id = await require_user_id(authorization)
-        profile = await supabase_service.get_or_create_profile(user_id)
-        require_ultimate(profile.ai_enabled)
-
-    source_url = (payload.video_url or "").strip()
-    if not source_url:
-        file_token = (payload.file_token or "").strip()
-        if not file_token:
-            raise HTTPException(status_code=400, detail="fileToken or videoUrl is required")
-
-        downloads_dir = Path(settings.DOWNLOADS_DIR)
-        files = sorted(downloads_dir.glob(f"{file_token}_*"))
-        if not files:
-            raise HTTPException(status_code=404, detail="File not found. Download the video first, then upscale using fileToken.")
-
-        base = _public_base_url(request)
-        source_url = f"{base}/api/file/serve/{file_token}"
+        if not profile.ai_enabled:
+            raise HTTPException(status_code=403, detail="AI features require Ultimate")
 
     try:
-        prediction = await replicate_upscale_service.create_prediction(source_url=source_url, model_key=payload.model)
-        return {"predictionId": prediction.get("id"), "status": prediction.get("status")}
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/upscale/status/{prediction_id}")
-async def upscale_status(prediction_id: str, authorization: str | None = Header(default=None)):
-    if settings.SUPABASE_ENABLED:
-        user_id = await require_user_id(authorization)
-        profile = await supabase_service.get_or_create_profile(user_id)
-        require_ultimate(profile.ai_enabled)
-    try:
-        prediction = await replicate_upscale_service.get_prediction(prediction_id)
-        raw_status = prediction.get("status")
-        output = prediction.get("output")
-        if isinstance(output, list) and output:
-            output = output[-1]
-
-        status = "processing"
-        if raw_status == "succeeded":
-            status = "succeeded"
-        elif raw_status in ("failed", "canceled"):
-            status = "failed"
-
-        return {
-            "status": status,
-            "rawStatus": raw_status,
-            "output": output,
-            "error": prediction.get("error"),
-        }
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/file/serve/{file_token}")
-async def serve_file(file_token: str):
-    try:
-        downloads_dir = Path(settings.DOWNLOADS_DIR)
-        _cleanup_old_downloads(downloads_dir)
-        # Look for file in downloads folder starting with token
-        files = sorted(downloads_dir.glob(f"{file_token}_*"))
-        
-        if not files:
-            raise HTTPException(status_code=404, detail="File not found")
-            
-        filepath = files[0]
-        filename = filepath.name
-        # Remove the token prefix for the download name if desired, or keep it unique. 
-        # Let's remove the token prefix for the user implementation: {token}_{title}.ext
-        # {file_token}_ prefix length is len(file_token)+1
-        download_name = filename[len(file_token)+1:]
-
-        return FileResponse(
-            str(filepath), 
-            filename=download_name,
-        )
-    except Exception as e:
-        print(f"Serve error: {e}")
-        raise HTTPException(status_code=404, detail="File not found")
-
-
-@router.get("/me")
-async def get_me(authorization: str | None = Header(default=None)):
-    """
-    Returns the current user's subscription/usage information (Supabase).
-    """
-    if not settings.SUPABASE_ENABLED:
-        return {
-            "supabase_enabled": False,
-            "plan": "free",
-            "downloads_used": 0,
-            "downloads_remaining": 5,
-            "ai_enabled": False,
-            "ultimate_until": None,
-        }
-
-    user_id = await require_user_id(authorization)
-    profile = await supabase_service.get_or_create_profile(user_id)
-    return {
-        "supabase_enabled": True,
-        "user_id": profile.user_id,
-        "plan": profile.effective_plan,
-        "downloads_used": profile.downloads_used,
-        "downloads_remaining": profile.downloads_remaining,
-        "ai_enabled": profile.ai_enabled,
-        "ultimate_until": profile.ultimate_until,
-    }
-
-
-class AdminSetPlanRequest(BaseModel):
-    user_id: str
-    plan: str
-
-
-@router.post("/admin/set-plan")
-async def admin_set_plan(payload: AdminSetPlanRequest, x_admin_token: str | None = Header(default=None)):
-    if settings.ADMIN_TOKEN and x_admin_token != settings.ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    try:
-        profile = await supabase_service.set_plan(user_id=payload.user_id, plan=payload.plan)
-        return {
-            "user_id": profile.user_id,
-            "plan": profile.effective_plan,
-            "downloads_used": profile.downloads_used,
-            "downloads_remaining": profile.downloads_remaining,
-            "ai_enabled": profile.ai_enabled,
-            "ultimate_until": profile.ultimate_until,
-        }
-    except ValueError as e:
+        info = dump_json(req.url)
+        title = str(info.get("title") or "Video")
+        description_raw = info.get("description") or info.get("full_description") or ""
+        description = str(description_raw).strip()
+        # Transcript extraction is platform-dependent; start with metadata fallback.
+        return await deepseek_service.summarize_video(title=title, description=description, transcript_text=None, lang=lang)
+    except YtDlpError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Summarize failed")
 
 
-class PromoRedeemRequest(BaseModel):
-    code: str
-
-
-@router.post("/promo/redeem")
-async def redeem_promo(payload: PromoRedeemRequest, authorization: str | None = Header(default=None)):
-    if not settings.SUPABASE_ENABLED:
-        raise HTTPException(status_code=503, detail="Supabase is not configured on the server (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)")
-
-    user_id = await require_user_id(authorization)
-    result = await supabase_service.redeem_promo_code(user_id=user_id, code=(payload.code or "").strip())
-    # Return fresh entitlements after redeem attempt
-    profile = await supabase_service.get_or_create_profile(user_id)
-    return {
-        "success": bool(result.get("success")),
-        "message": result.get("message") or "",
-        "plan": profile.effective_plan,
-        "ai_enabled": profile.ai_enabled,
-        "ultimate_until": profile.ultimate_until,
-        "downloads_used": profile.downloads_used,
-        "downloads_remaining": profile.downloads_remaining,
-    }
-
-
-class BeatRequest(BaseModel):
+class DownloadRequest(BaseModel):
     url: str
+    selected_format_id: str = Field(alias="selected_format_id")
+    mode: Literal["auto", "video", "audio", "av"] = "auto"
+    access_token: Optional[str] = None
 
     @field_validator("url")
     @classmethod
@@ -618,43 +256,148 @@ class BeatRequest(BaseModel):
             raise ValueError("URL must start with http:// or https://")
         return v
 
+    @field_validator("selected_format_id")
+    @classmethod
+    def _validate_format_id(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("selected_format_id is required")
+        return v
 
-@router.post("/beat")
-async def beat_generate(payload: BeatRequest, lang: str = "ar", authorization: str | None = Header(default=None)):
-    """
-    BEAT (Ultimate): Generate an editing/publishing blueprint with exportable chapters & markers.
-    """
-    if settings.SUPABASE_ENABLED:
-        user_id = await require_user_id(authorization)
-        profile = await supabase_service.get_or_create_profile(user_id)
-        require_ultimate(profile.ai_enabled)
 
-    info = await ytdlp_service.get_video_info(payload.url)
-    title = info.get("title") or "Video"
-    description = info.get("description") or ""
-    duration_seconds = info.get("duration_seconds")
+def _pick_compatible_audio_format(video_container: str, audio_only: list[Any]):
+    """
+    Prefer audio that commonly muxes well with the video container:
+    - mp4 video -> m4a/mp4 audio
+    - webm video -> opus/webm audio
+    Fall back to highest abr/filesize.
+    """
+    vc = (video_container or "").lower()
+    if vc == "mp4":
+        preferred = {"m4a", "mp4"}
+    elif vc == "webm":
+        preferred = {"opus", "webm"}
+    else:
+        preferred = set()
+
+    def score(f: Any):
+        c = (getattr(f, "container", "") or "").lower()
+        pref = 1 if (preferred and c in preferred) else 0
+        abr = getattr(f, "abr", None) or 0.0
+        size = getattr(f, "filesize", None) or getattr(f, "filesize_approx", None) or 0
+        return (pref, abr, size)
+
+    return sorted(audio_only, key=score, reverse=True)[0] if audio_only else None
+
+
+@router.post("/download")
+async def download(request: Request, background: BackgroundTasks, authorization: str | None = Header(default=None)):
+    if is_serverless_runtime():
+        raise HTTPException(status_code=503, detail="Downloads are disabled in serverless runtime. Use a VPS/container deployment.")
+
+    content_type = (request.headers.get("content-type") or "").lower()
+    payload: Any
+    if "application/json" in content_type:
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
+    else:
+        form = await request.form()
+        payload = {
+            "url": str(form.get("url") or ""),
+            "selected_format_id": str(form.get("selected_format_id") or form.get("format_id") or ""),
+            "mode": str(form.get("mode") or "auto"),
+            "access_token": str(form.get("access_token") or ""),
+        }
+
     try:
-        duration_seconds = int(duration_seconds) if duration_seconds is not None else None
-    except Exception:
-        duration_seconds = None
+        req = DownloadRequest.model_validate(payload)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    transcript_text = await ytdlp_service.get_transcript_text(payload.url, lang=(lang or "ar"))
-    result = await deepseek_service.beat_pack(
-        title=title,
-        description=description,
-        duration_seconds=duration_seconds,
-        transcript_text=transcript_text,
-        lang=(lang or "ar"),
-    )
+    authz = authorization
+    if not authz and req.access_token:
+        authz = f"Bearer {req.access_token}"
 
-    admin_log.add(
-        "beat",
-        {
-            "title": title,
-            "extractor": info.get("extractor"),
-            "duration_seconds": duration_seconds,
-            "has_transcript": bool(transcript_text),
-        },
-    )
+    if settings.SUPABASE_ENABLED:
+        user_id = await require_user_id(authz)
+        try:
+            quota = await supabase_service.consume_download(user_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Subscription check failed: {e}")
+        if not bool(quota.get("allowed")):
+            raise HTTPException(status_code=403, detail="FREE limit reached")
 
-    return result
+    try:
+        info = dump_json(req.url)
+        formats = normalize_formats(info)
+        available_ids = {f.format_id for f in formats}
+        parts = validate_format_selector(req.selected_format_id, available_ids)
+
+        # Enforce "auto" merge behavior without using best/bestaudio.
+        selector = req.selected_format_id
+        if len(parts) == 1:
+            fid = parts[0]
+            fmt = next((f for f in formats if f.format_id == fid), None)
+            if not fmt:
+                raise YtDlpError(f"Requested format_id is not available: {fid}")
+
+            if req.mode in ("audio",) and not fmt.is_audio_only:
+                raise YtDlpError("Selected format is not audio-only.")
+            if req.mode in ("video",) and not (fmt.is_video_only or fmt.is_muxed):
+                raise YtDlpError("Selected format is not a video format.")
+
+            if req.mode in ("av", "auto") and fmt.is_video_only:
+                if not has_ffmpeg():
+                    raise YtDlpError("Selected format is video-only and requires FFmpeg to merge with audio.")
+                # Pick best audio-only by abr/filesize (using real format_ids).
+                audio_only = [f for f in formats if f.is_audio_only]
+                if not audio_only:
+                    raise YtDlpError("No audio-only formats available to merge.")
+                best_audio = _pick_compatible_audio_format(fmt.container, audio_only)
+                selector = f"{fid}+{best_audio.format_id}"
+
+        tmp_dir = Path(tempfile.mkdtemp(prefix="downvid_dl_"))
+        out_path = download_to_file(url=req.url, selector=selector, out_dir=tmp_dir, timeout_s=900)
+
+        # Cleanup entire temp dir after response
+        def _cleanup_dir():
+            try:
+                for p in tmp_dir.iterdir():
+                    try:
+                        p.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                tmp_dir.rmdir()
+            except Exception:
+                pass
+
+        background.add_task(_cleanup_dir)
+
+        title = str(info.get("title") or "downvid").strip() or "downvid"
+        filename = out_path.name
+        admin_log.add("download_completed", {"title": title, "filename": filename, "selector": selector})
+        return FileResponse(
+            path=str(out_path),
+            filename=filename,
+            media_type="application/octet-stream",
+            background=BackgroundTask(background),
+        )
+    except YtDlpError as e:
+        admin_log.add("download_error", {"url": req.url, "error": str(e)})
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        admin_log.add("download_error", {"url": req.url, "error": str(e)})
+        raise HTTPException(status_code=500, detail="Download failed")
+
+
+@router.get("/diagnostics")
+async def diagnostics():
+    return {
+        "yt_dlp_cli": True,
+        "has_ffmpeg": has_ffmpeg(),
+        "serverless": is_serverless_runtime(),
+        "cookies_env_set": bool((os.getenv("YTDLP_COOKIES_B64") or "").strip() or (os.getenv("YTDLP_COOKIES_PATH") or "").strip()),
+        "proxy_set": bool((os.getenv("YTDLP_PROXY") or "").strip()),
+    }

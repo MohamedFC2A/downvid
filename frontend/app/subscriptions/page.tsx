@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { useSettings } from '@/hooks/useSettings';
 import { t } from '@/lib/i18n';
+import { apiUrl } from '@/lib/backend';
 
 function UltimateChip() {
     return (
@@ -80,7 +81,7 @@ export default function SubscriptionsPage() {
         if (planIsLoading) return;
         setPromoBusy(true);
         try {
-            const res = await fetch(`/api/promo/redeem`, {
+            const res = await fetch(apiUrl('/promo/redeem'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

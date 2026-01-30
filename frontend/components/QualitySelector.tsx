@@ -11,7 +11,6 @@ export interface VideoFormat {
     filesize_str: string;
     note: string;
     extension: string;
-    url?: string;
     height?: number;
     fps?: number;
     vcodec?: string;
@@ -149,7 +148,7 @@ export function QualitySelector({
         return parts.join(' / ') || '—';
     };
 
-    const hasDownloadLink = (fmt: VideoFormat | null | undefined) => Boolean(fmt?.url && String(fmt.url).startsWith('http'));
+    const hasDownloadLink = (fmt: VideoFormat | null | undefined) => Boolean(fmt?.format_id && String(fmt.format_id).trim().length > 0);
 
     const noAudio = (fmt: VideoFormat) => {
         if (mode !== 'video') return false;

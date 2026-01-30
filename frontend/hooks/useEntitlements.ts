@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-
-const API_BASE = '/api';
+import { apiUrl } from '@/lib/backend';
 
 export type Entitlements = {
     loading: boolean;
@@ -48,7 +47,7 @@ export function useEntitlements(): Entitlements {
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch(`${API_BASE}/me`, { headers: headers ?? undefined });
+            const res = await fetch(apiUrl('/me'), { headers: headers ?? undefined });
             const json = await res.json().catch(() => null);
             if (!res.ok) {
                 if (res.status === 401 || res.status === 403) {

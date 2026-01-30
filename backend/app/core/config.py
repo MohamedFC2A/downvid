@@ -20,14 +20,6 @@ class Settings:
     # (e.g., Replicate fetching /api/file/serve/{token}).
     PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "")
 
-    # RapidAPI (social-download-all-in-one)
-    RAPIDAPI_KEY: str = os.getenv("RAPIDAPI_KEY", "")
-    RAPIDAPI_HOST: str = os.getenv("RAPIDAPI_HOST", "social-download-all-in-one.p.rapidapi.com")
-    RAPIDAPI_SNAP_HOST: str = os.getenv("RAPIDAPI_SNAP_HOST", "snap-video3.p.rapidapi.com")
-
-    # Download/info provider: "ytdlp" (default) or "rapidapi"
-    DOWNLOAD_PROVIDER: str = os.getenv("DOWNLOAD_PROVIDER", "ytdlp")
-
     # Storage paths (override via env for container deployments)
     FRONTEND_PATH: str = os.getenv(
         "FRONTEND_PATH",
