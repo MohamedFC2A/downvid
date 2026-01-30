@@ -406,6 +406,9 @@ async def diagnostics():
         "yt_dlp_cli": True,
         "has_ffmpeg": has_ffmpeg(),
         "serverless": is_serverless_runtime(),
+        "supabase_enabled": settings.SUPABASE_ENABLED,
+        "supabase_url_set": bool((settings.SUPABASE_URL or "").strip()),
+        "supabase_service_role_key_set": bool((settings.SUPABASE_SERVICE_ROLE_KEY or "").strip()),
         "cookies_env_set": bool((os.getenv("YTDLP_COOKIES_B64") or "").strip() or (os.getenv("YTDLP_COOKIES_PATH") or "").strip()),
         "proxy_set": bool((os.getenv("YTDLP_PROXY") or "").strip()),
     }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 import httpx
@@ -7,6 +8,8 @@ import jwt
 from fastapi import HTTPException
 
 from app.core.config import settings
+
+logger = logging.getLogger("downvid.auth")
 
 
 def _extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
@@ -81,18 +84,27 @@ async def resolve_user_id(authorization: Optional[str]) -> Optional[str]:
         try:
             res = await client.get(url, headers=headers, timeout=10.0)
             if res.status_code != 200:
+                logger.warning("Supabase token validation failed: status=%s body=%s", res.status_code, (res.text or "")[:300])
                 return None
             data = res.json() or {}
             user_id = data.get("id")
             return str(user_id) if user_id else None
         except Exception:
+            logger.exception("Supabase token validation error")
             return None
 
 
 async def require_user_id(authorization: Optional[str]) -> str:
+    token = _extract_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Unauthorized: missing Bearer token")
+
     user_id = await resolve_user_id(authorization)
     if not user_id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized: invalid token (or SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY mismatch)",
+        )
     return user_id
 
 
