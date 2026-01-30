@@ -37,6 +37,8 @@ export default function ToolPage() {
     const [platformDetected, setPlatformDetected] = useState<string | null>(null);
     const [lastError, setLastError] = useState<string>("");
     const [isDownloading, setIsDownloading] = useState(false);
+    const [pendingDownloadUrl, setPendingDownloadUrl] = useState<string | null>(null);
+    const [popupBlocked, setPopupBlocked] = useState(false);
     const [showLogs, setShowLogs] = useState(false);
     const [logs, setLogs] = useState<DebugLogItem[]>([]);
     const isDataSaver = settings.dataSaver;
@@ -321,6 +323,8 @@ export default function ToolPage() {
 
         setLastError("");
         setIsDownloading(true);
+        setPendingDownloadUrl(null);
+        setPopupBlocked(false);
         try {
             pushLog({
                 level: "info",
@@ -398,6 +402,48 @@ export default function ToolPage() {
             const endpoint = isGoogleVideo ? "/api/download/redirect" : "/api/download/proxy";
             pushLog({ level: "info", title: "download.endpoint", data: { endpoint, urlHost } });
 
+            if (isGoogleVideo) {
+                const headers: Record<string, string> = { "Content-Type": "application/json" };
+                if (auth.accessToken) headers.Authorization = `Bearer ${auth.accessToken}`;
+
+                const res = await fetch("/api/download/redirect", {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ url: selectedFormat.url }),
+                });
+                const json = await res.json().catch(() => null);
+                if (!res.ok) {
+                    const msg = (json?.detail || json?.error || `Download failed (${res.status})`).toString();
+                    setLastError(msg);
+                    pushLog({ level: "error", title: "download.redirect", detail: msg, data: json || undefined });
+                    setIsDownloading(false);
+                    return;
+                }
+
+                const redirectTo = (json?.redirect_to || "").toString().trim();
+                if (!redirectTo.startsWith("http")) {
+                    const msg = "Invalid redirect URL";
+                    setLastError(msg);
+                    pushLog({ level: "error", title: "download.redirect", detail: msg, data: json || undefined });
+                    setIsDownloading(false);
+                    return;
+                }
+
+                setPendingDownloadUrl(redirectTo);
+                const w = window.open(redirectTo, "_blank", "noopener,noreferrer");
+                if (!w) {
+                    setPopupBlocked(true);
+                    setLastError(t(lang, "tool.popupBlocked"));
+                    pushLog({ level: "warn", title: "download.popup_blocked", detail: redirectTo });
+                } else {
+                    pushLog({ level: "info", title: "download.opened", detail: redirectTo });
+                }
+
+                window.setTimeout(() => void entitlements.refresh(), 800);
+                setIsDownloading(false);
+                return;
+            }
+
             const form = document.createElement("form");
             form.method = "POST";
             form.action = endpoint;
@@ -410,13 +456,11 @@ export default function ToolPage() {
             inUrl.value = selectedFormat.url;
             form.appendChild(inUrl);
 
-            if (!isGoogleVideo) {
-                const inName = document.createElement("input");
-                inName.type = "hidden";
-                inName.name = "filename";
-                inName.value = filename;
-                form.appendChild(inName);
-            }
+            const inName = document.createElement("input");
+            inName.type = "hidden";
+            inName.name = "filename";
+            inName.value = filename;
+            form.appendChild(inName);
 
             const inToken = document.createElement("input");
             inToken.type = "hidden";
@@ -706,6 +750,32 @@ export default function ToolPage() {
                                         <div className="text-[11px] text-[var(--foreground)] opacity-60">
                                             {t(lang, "tool.downloadNote")}
                                         </div>
+
+                                        {(popupBlocked || pendingDownloadUrl) && (
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    variant="secondary"
+                                                    className="h-10 px-4 text-xs"
+                                                    onClick={() => {
+                                                        if (!pendingDownloadUrl) return;
+                                                        window.open(pendingDownloadUrl, "_blank", "noopener,noreferrer");
+                                                    }}
+                                                    disabled={!pendingDownloadUrl}
+                                                >
+                                                    {t(lang, "tool.openDownload")}
+                                                </Button>
+                                                {pendingDownloadUrl && (
+                                                    <a
+                                                        href={pendingDownloadUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer noopener"
+                                                        className="text-[11px] underline underline-offset-4 text-[var(--foreground)] opacity-70 hover:opacity-100 truncate max-w-[60%]"
+                                                    >
+                                                        {pendingDownloadUrl}
+                                                    </a>
+                                                )}
+                                            </div>
+                                        )}
 
                                         <div className="flex items-center justify-between">
                                             <button

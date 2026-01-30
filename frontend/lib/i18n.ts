@@ -201,6 +201,8 @@ const EN: Dict = {
     "debug.clear": "Clear",
     "debug.empty": "No logs yet.",
     "tool.downloadNote": "If proxy download fails, DOWNVID uses a direct download link to avoid Vercel timeouts.",
+    "tool.openDownload": "Open download",
+    "tool.popupBlocked": "Popup blocked. Click “Open download”.",
 
     "quality.video": "Video",
     "quality.audio": "Audio",
@@ -546,6 +548,8 @@ const AR: Dict = {
     "debug.clear": "مسح",
     "debug.empty": "لا يوجد سجل بعد.",
     "tool.downloadNote": "لو التحميل بالوكيل فشل، DOWNVID سيستخدم تنزيل مباشر لتجنب مهلة Vercel.",
+    "tool.openDownload": "فتح رابط التحميل",
+    "tool.popupBlocked": "المتصفح منع النافذة. اضغط «فتح رابط التحميل».",
 
     "quality.video": "فيديو",
     "quality.audio": "صوت",

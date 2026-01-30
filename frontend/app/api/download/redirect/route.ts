@@ -32,9 +32,14 @@ export async function POST(req: Request) {
         );
     }
 
-    const form = await req.formData().catch(() => null);
-    const urlRaw = (form?.get('url') || '').toString().trim();
-    const tokenField = (form?.get('access_token') || '').toString().trim();
+    const contentType = (req.headers.get('content-type') || '').toLowerCase();
+    const isJson = contentType.includes('application/json');
+
+    const body = isJson ? ((await req.json().catch(() => null)) as { url?: string } | null) : null;
+    const form = !isJson ? await req.formData().catch(() => null) : null;
+
+    const urlRaw = isJson ? (body?.url || '').toString().trim() : (form?.get('url') || '').toString().trim();
+    const tokenField = isJson ? '' : (form?.get('access_token') || '').toString().trim();
 
     const auth = req.headers.get('authorization') || '';
     const headerToken = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
@@ -74,6 +79,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ detail: 'FREE limit reached' }, { status: 403 });
     }
 
+    // For browser fetch: return JSON so the client can open a new tab without iframe confusion.
+    if (isJson) {
+        return NextResponse.json({ redirect_to: u.toString() }, { status: 200 });
+    }
+
+    // For legacy form submissions: 302 redirect.
     return NextResponse.redirect(u.toString(), { status: 302 });
 }
-
