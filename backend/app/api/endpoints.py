@@ -392,6 +392,14 @@ async def download(request: Request, background: BackgroundTasks, authorization:
         raise HTTPException(status_code=500, detail="Download failed")
 
 
+@router.get("/download")
+async def download_help():
+    return {
+        "detail": "Use POST /api/download with JSON { url, selected_format_id, mode }.",
+        "example": {"url": "https://...", "selected_format_id": "137", "mode": "video"},
+    }
+
+
 @router.get("/diagnostics")
 async def diagnostics():
     return {

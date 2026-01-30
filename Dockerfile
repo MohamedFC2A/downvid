@@ -1,43 +1,11 @@
 # =============================================================================
-# DOWNVID - Optimized Multi-Stage Dockerfile (Railway-ready)
+# DOWNVID - Backend-only Dockerfile (Railway-ready)
 # =============================================================================
-# Architecture: Single-process deployment
-# - Next.js is built as a static export (HTML/CSS/JS files)
-# - FastAPI serves static files + API endpoints + WebSockets
-# - Only FastAPI listens on $PORT (platform-friendly: Railway/Fly/etc.)
+# This image runs ONLY the FastAPI backend (yt-dlp + download endpoints).
+# Frontend is expected to be deployed separately (e.g., Vercel) and point to this backend via
+# NEXT_PUBLIC_BACKEND_URL.
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# Stage 1: Build Frontend (Next.js Static Export)
-# -----------------------------------------------------------------------------
-FROM node:20-alpine AS frontend-builder
-
-WORKDIR /app/frontend
-
-# Copy package files first for better layer caching
-COPY frontend/package*.json ./
-
-# Install dependencies (clean install for reproducibility)
-RUN npm ci --prefer-offline --no-audit
-
-# Copy frontend source code
-COPY frontend/ ./
-
-# Build-time environment for Next.js static export.
-# Prefer same-origin requests by default (frontend uses `/api` and current host for WS).
-ENV NODE_ENV=production
-ARG NEXT_PUBLIC_BACKEND_URL=""
-ARG NEXT_PUBLIC_WS_URL=""
-ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
-ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
-
-# Build Next.js as static export (outputs to 'out' directory)
-# We use 'test -d out' to ensure the build actually produced the expected output
-RUN npm run build && test -d out
-
-# -----------------------------------------------------------------------------
-# Stage 2: Production Runtime (Python/FastAPI)
-# -----------------------------------------------------------------------------
 FROM python:3.11-slim AS production
 
 # Install system dependencies
@@ -70,15 +38,6 @@ RUN pip install --no-cache-dir -r backend/requirements.txt && \
 # Copy backend source code
 COPY backend/ ./backend/
 
-# Copy built frontend static files from builder stage
-COPY --from=frontend-builder /app/frontend/out ./frontend/out
-
-# Debug: List frontend directory to verify copy worked
-RUN echo "=== Frontend out directory contents ===" && \
-    ls -la /app/frontend/out/ && \
-    echo "=== _next directory ===" && \
-    ls -la /app/frontend/out/_next/
-
 # Create required directories
 RUN mkdir -p /app/downloads
 
@@ -86,7 +45,6 @@ RUN mkdir -p /app/downloads
 ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
 ENV NODE_ENV=production
-ENV FRONTEND_PATH=/app/frontend/out
 ENV DOWNLOADS_DIR=/app/downloads
 
 # Expose the port
