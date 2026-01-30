@@ -150,7 +150,8 @@ async def analyze_video(req: AnalyzeRequest, ai: bool = False, lang: str = "ar",
             raise YtDlpError(
                 "YouTube returned no downloadable formats (only storyboards/metadata). "
                 "This usually means the server IP is blocked or cookies are insufficient. "
-                "Try setting YTDLP_PROXY (residential) and/or refresh YTDLP_COOKIES_B64."
+                "Try refreshing cookies (YTDLP_COOKIES_PATH / YTDLP_COOKIES_B64). "
+                "If you're running locally on Windows/macOS, you can also use YTDLP_COOKIES_FROM_BROWSER=chrome."
             )
         out_formats: List[QualityFormat] = []
         for f in formats:
@@ -430,7 +431,11 @@ async def diagnostics():
         "supabase_enabled": settings.SUPABASE_ENABLED,
         "supabase_url_set": bool((settings.SUPABASE_URL or "").strip()),
         "supabase_service_role_key_set": bool((settings.SUPABASE_SERVICE_ROLE_KEY or "").strip()),
-        "cookies_env_set": bool((os.getenv("YTDLP_COOKIES_B64") or "").strip() or (os.getenv("YTDLP_COOKIES_PATH") or "").strip()),
+        "cookies_env_set": bool(
+            (os.getenv("YTDLP_COOKIES_B64") or "").strip()
+            or (os.getenv("YTDLP_COOKIES_PATH") or "").strip()
+            or (os.getenv("YTDLP_COOKIES_FROM_BROWSER") or "").strip()
+        ),
         "cookies": cookies_env_diagnostics(),
         "proxy_set": bool((os.getenv("YTDLP_PROXY") or "").strip()),
     }

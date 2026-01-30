@@ -31,6 +31,10 @@ def has_ffmpeg() -> bool:
     return shutil.which("ffmpeg") is not None
 
 
+def _cookies_from_browser_spec() -> str:
+    return (os.getenv("YTDLP_COOKIES_FROM_BROWSER") or "").strip()
+
+
 def _cookies_file_from_env() -> Optional[str]:
     env_cookie_path = (os.getenv("YTDLP_COOKIES_PATH") or "").strip()
     if env_cookie_path and Path(env_cookie_path).exists():
@@ -53,11 +57,15 @@ def cookies_env_diagnostics() -> Dict[str, Any]:
     """
     path = (os.getenv("YTDLP_COOKIES_PATH") or "").strip()
     b64 = (os.getenv("YTDLP_COOKIES_B64") or "").strip()
+    from_browser = _cookies_from_browser_spec()
     out: Dict[str, Any] = {
         "cookies_path_set": bool(path),
         "cookies_path_exists": bool(path and Path(path).exists()),
         "cookies_b64_set": bool(b64),
+        "cookies_from_browser_set": bool(from_browser),
     }
+    if from_browser:
+        out["cookies_from_browser_hint"] = from_browser.split(":", 1)[0]
     if not b64:
         return out
 
@@ -142,6 +150,7 @@ def dump_json(url: str) -> Dict[str, Any]:
         cookies = _cookies_file_from_env()
         if cookies and (os.getenv("YTDLP_COOKIES_B64") or "").strip():
             cookies_tmp = cookies
+        cookies_from_browser = _cookies_from_browser_spec()
 
         # Use --dump-json as requested (prints one JSON object per video).
         # With --no-playlist in common args, this should produce exactly one JSON object.
@@ -152,6 +161,8 @@ def dump_json(url: str) -> Dict[str, Any]:
         ]
         if cookies:
             args += ["--cookies", cookies]
+        elif cookies_from_browser:
+            args += ["--cookies-from-browser", cookies_from_browser]
 
         code, out, err = _run_yt_dlp([*args, url], timeout_s=60)
         if code != 0:
@@ -311,6 +322,7 @@ def download_to_file(*, url: str, selector: str, out_dir: Path, timeout_s: int =
         cookies = _cookies_file_from_env()
         if cookies and (os.getenv("YTDLP_COOKIES_B64") or "").strip():
             cookies_tmp = cookies
+        cookies_from_browser = _cookies_from_browser_spec()
 
         args: List[str] = [
             *(_build_common_cli_args()),
@@ -326,6 +338,8 @@ def download_to_file(*, url: str, selector: str, out_dir: Path, timeout_s: int =
         ]
         if cookies:
             args += ["--cookies", cookies]
+        elif cookies_from_browser:
+            args += ["--cookies-from-browser", cookies_from_browser]
 
         code, out, err = _run_yt_dlp([*args, url], timeout_s=timeout_s)
         if code != 0:
