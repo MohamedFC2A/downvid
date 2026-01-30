@@ -148,6 +148,10 @@ def dump_json(url: str) -> Dict[str, Any]:
         args = [
             *(_build_common_cli_args()),
             "--skip-download",
+            # Prevent yt-dlp from applying a "best" default selection which can fail in restricted
+            # environments. We still parse ALL available formats from the JSON output.
+            "-f",
+            "all",
             "--dump-json",
         ]
         if cookies:
