@@ -148,10 +148,6 @@ def dump_json(url: str) -> Dict[str, Any]:
         args = [
             *(_build_common_cli_args()),
             "--skip-download",
-            # Prevent yt-dlp from applying a "best" default selection which can fail in restricted
-            # environments. We still parse ALL available formats from the JSON output.
-            "-f",
-            "all",
             "--dump-json",
         ]
         if cookies:
@@ -166,7 +162,21 @@ def dump_json(url: str) -> Dict[str, Any]:
                     "YouTube requires valid cookies for this request (bot check). "
                     "Update YTDLP_COOKIES_B64 / YTDLP_COOKIES_PATH with fresh exported cookies."
                 )
-            raise YtDlpError(msg or f"yt-dlp failed (exit {code})")
+            # Some environments still error on default format selection during metadata extraction.
+            # Retry once with an explicit format selector to avoid the default behavior.
+            if "requested format is not available" in lowered:
+                retry_args = [*args]
+                retry_args.insert(retry_args.index("--dump-json"), "-f")
+                retry_args.insert(retry_args.index("--dump-json"), "all")
+                code2, out2, err2 = _run_yt_dlp([*retry_args, url], timeout_s=60)
+                if code2 == 0:
+                    out = out2
+                    err = err2
+                else:
+                    msg2 = (err2 or out2 or msg).strip()
+                    raise YtDlpError(msg2 or f"yt-dlp failed (exit {code2})")
+            else:
+                raise YtDlpError(msg or f"yt-dlp failed (exit {code})")
         try:
             # yt-dlp may output multiple lines; take the first JSON object line.
             first = next((ln for ln in (out or "").splitlines() if ln.strip()), "")
